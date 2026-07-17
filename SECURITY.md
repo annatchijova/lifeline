@@ -3,9 +3,10 @@
 ## Scope
 
 LIFELINE is an alpha prototype and is not an emergency service. The current
-incident-room server binds to loopback, has no authentication, and treats the
-approver identity as declared rather than verified. Never expose it to an
-untrusted network or use it to coordinate a live emergency.
+incident-room server binds to loopback and uses local, token-authenticated
+roles. Those tokens are prototype credentials, not an organizational identity
+or authorization system. Never expose the server to an untrusted network or
+use it to coordinate a live emergency.
 
 ## Reporting a vulnerability
 
@@ -29,4 +30,6 @@ possible.
 - No automatic dispatch is performed by the kernel or incident room.
 - Unverified, conflicting, or stale inputs cannot silently become proposals.
 - Plans and approvals are independently verifiable artifacts.
+- The approval identity comes from the authenticated local operator, never a
+  client-supplied display name.
 - A model cannot select resources, routes, priorities, or recipients.

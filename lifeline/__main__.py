@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import sys
 from pathlib import Path
@@ -37,13 +38,44 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser.add_argument("--out", default="out", help="directory holding the exported plan (default: out)")
     serve_parser.add_argument("--port", type=int, default=8788)
 
+    operator_parser = subparsers.add_parser("operator", help="bootstrap the local authenticated operator registry")
+    operator_subparsers = operator_parser.add_subparsers(dest="operator_command", required=True)
+    operator_init = operator_subparsers.add_parser("init", help="create the one-time local admin token")
+    operator_init.add_argument("--out", default="out", help="directory holding the local operator registry")
+    operator_init.add_argument("--id", required=True, help="lowercase local operator id, e.g. anna-coordinator")
+    operator_add = operator_subparsers.add_parser("add", help="add a local role using an existing admin token")
+    operator_add.add_argument("--out", default="out", help="directory holding the local operator registry")
+    operator_add.add_argument("--id", required=True, help="lowercase local operator id")
+    operator_add.add_argument("--role", required=True, choices=("reader", "reporter", "coordinator", "admin"))
+
     verify_parser = subparsers.add_parser("verify", help="verify the plan seal and the approvals chain offline")
     verify_parser.add_argument("--out", default="out", help="directory holding the exported plan (default: out)")
 
     args = parser.parse_args(argv)
 
+    if args.command == "operator":
+        from lifeline.auth import AuthError, OperatorStore
+        try:
+            operators = OperatorStore(Path(args.out) / "operators.sqlite3")
+            if args.operator_command == "init":
+                operator, token = operators.bootstrap(args.id)
+            else:
+                authorizer = operators.authenticate(getpass.getpass("Existing admin token: "))
+                operator, token = operators.add(authorizer, args.id, args.role)
+        except AuthError as error:
+            print(f"operator operation refused: {error}", file=sys.stderr)
+            return 2
+        print(f"created local {operator.role}: {operator.operator_id}")
+        print("store this token now; it is not retained in plaintext:")
+        print(token)
+        return 0
+
     if args.command == "serve":
         from lifeline.server import serve
+        from lifeline.auth import OperatorStore
+        if not OperatorStore(Path(args.out) / "operators.sqlite3").has_active_operator():
+            print("server refused: bootstrap a local admin first with: lifeline operator init --out out --id <operator-id>", file=sys.stderr)
+            return 2
         serve(Path.cwd(), args.out, port=args.port)
         return 0
 

@@ -1,9 +1,8 @@
 """Local incident-room server: static room + append-only approvals API.
 
-Stdlib only. Binds to loopback by design; there is no authentication yet,
-so this must not be exposed beyond the coordinator's machine. The approver
-field is a declared identity, not a verified one — a documented limitation
-until roles land (roadmap step 3).
+Stdlib only. Binds to loopback by design. The incident API requires a local
+bearer token issued by ``lifeline operator init``; the authenticated identity,
+not a client-supplied name, is written into approvals.
 
 Endpoints:
   GET/POST /api/incidents -> list/search or create validated incidents
@@ -33,6 +32,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from lifeline.approvals import ACTIONS, ApprovalChainError, append_entry, read_entries, verify_chain
 from lifeline.alerts import alerts_from_events
+from lifeline.auth import AuthError, Operator, OperatorStore
 from lifeline.export import seal_digest
 from lifeline.incidents import IncidentConflict, IncidentNotFound, IncidentStore, IncidentStoreError
 
@@ -100,10 +100,28 @@ class RoomHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _operator(self, required_role: str) -> Operator:
+        authorization = self.headers.get("Authorization", "")
+        scheme, _, token = authorization.partition(" ")
+        if scheme.lower() != "bearer" or not token:
+            raise ApiError(401, "a bearer token is required")
+        try:
+            operator = self.server.operators.authenticate(token)
+        except AuthError as error:
+            raise ApiError(401, str(error)) from error
+        if not self.server.operators.allows(operator, required_role):
+            raise ApiError(403, f"operator '{operator.operator_id}' does not have the '{required_role}' role")
+        return operator
+
     def do_GET(self):
         clean = self._clean_path()
         parsed = urlparse(self.path)
         if clean == "/api/incidents":
+            try:
+                self._operator("reader")
+            except ApiError as error:
+                self._send_json(error.status, {"error": error.message})
+                return
             query = parse_qs(parsed.query).get("q", [""])[0]
             self._send_json(200, {"incidents": self.server.incidents.list(query)})
             return
@@ -111,6 +129,11 @@ class RoomHandler(SimpleHTTPRequestHandler):
             self._get_incident(clean, parsed.query)
             return
         if clean == "/api/approvals":
+            try:
+                self._operator("reader")
+            except ApiError as error:
+                self._send_json(error.status, {"error": error.message})
+                return
             entries = []
             chain_error = None
             try:
@@ -141,7 +164,11 @@ class RoomHandler(SimpleHTTPRequestHandler):
         clean = self._clean_path()
         if clean == "/api/incidents":
             try:
+                self._operator("reporter")
                 snapshot = self.server.incidents.create(self._json_body())
+            except ApiError as error:
+                self._send_json(error.status, {"error": error.message})
+                return
             except (IncidentStoreError, IncidentConflict) as error:
                 self._send_json(409 if isinstance(error, IncidentConflict) else 400, {"error": str(error)})
                 return
@@ -154,23 +181,26 @@ class RoomHandler(SimpleHTTPRequestHandler):
             self.send_error(404)
             return
         try:
-            entry = self._record_approval()
+            entry = self._record_approval(self._operator("coordinator"))
         except ApiError as error:
             self._send_json(error.status, {"error": error.message})
             return
         self._send_json(201, {"entry": entry})
 
-    def _record_approval(self) -> dict:
+    def _record_approval(self, operator: Operator) -> dict:
         body = self._json_body()
 
         fields = {}
-        for name in ("request_id", "action", "approver", "proposal_audit_hash", "plan_sha256"):
+        for name in ("request_id", "action", "proposal_audit_hash", "plan_sha256"):
             value = body.get(name)
             if not isinstance(value, str) or not value.strip():
                 raise ApiError(400, f"field '{name}' must be a non-empty string")
             if len(value) > MAX_FIELD_LENGTH:
                 raise ApiError(400, f"field '{name}' exceeds {MAX_FIELD_LENGTH} characters")
             fields[name] = value.strip()
+        declared_approver = body.get("approver")
+        if declared_approver is not None and declared_approver != operator.operator_id:
+            raise ApiError(403, "client-supplied approver does not match authenticated operator")
         if fields["action"] not in ACTIONS:
             raise ApiError(400, f"action must be one of {list(ACTIONS)}")
 
@@ -198,7 +228,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                     self.server.approvals_path,
                     request_id=fields["request_id"],
                     action=fields["action"],
-                    approver=fields["approver"],
+                    approver=operator.operator_id,
                     proposal_audit_hash=fields["proposal_audit_hash"],
                     plan_sha256=plan_sha,
                     recorded_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -229,6 +259,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
 
     def _get_incident(self, clean: str, query: str) -> None:
         try:
+            self._operator("reader")
             incident_id, action = self._incident_path(clean)
             if action is None:
                 self._send_json(200, self._snapshot_payload(self.server.incidents.get(incident_id)))
@@ -263,6 +294,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
             incident_id, action = self._incident_path(clean)
             body = self._json_body()
             if action == "reports":
+                self._operator("reporter")
                 entity_type = body.get("entity_type")
                 report = body.get("report")
                 if not isinstance(entity_type, str):
@@ -271,6 +303,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 self._send_json(201, self._snapshot_payload(snapshot))
                 return
             if action == "corrections":
+                self._operator("coordinator")
                 entity_type = body.get("entity_type")
                 report = body.get("report")
                 if not isinstance(entity_type, str):
@@ -279,6 +312,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 self._send_json(201, self._snapshot_payload(snapshot))
                 return
             if action == "plan":
+                self._operator("reader")
                 reference_time = body.get("reference_time")
                 if reference_time is not None and not isinstance(reference_time, str):
                     raise ApiError(400, "reference_time must be a string or null")
@@ -302,6 +336,7 @@ def make_server(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.
     server.approvals_path = server.out_dir / "approvals.jsonl"
     server.approvals_lock = threading.Lock()
     server.incidents = IncidentStore(server.out_dir / "incidents.sqlite3")
+    server.operators = OperatorStore(server.out_dir / "operators.sqlite3")
     return server
 
 

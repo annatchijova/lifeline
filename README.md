@@ -88,8 +88,9 @@ ranking people or becoming a separate decision authority.
 Approve/Reject decisions in the room are appended to
 `out/approvals.jsonl`, a hash-chained, append-only log bound to the exact
 plan seal and proposal audit hash (stale plans and duplicates are refused
-with 409). The server binds to loopback and has no authentication yet: the
-approver identity is declared, not verified. Verify everything offline with:
+with 409). The server binds to loopback and requires a local authenticated
+coordinator token: the approver identity is derived from that token, not a
+client-supplied name. Verify everything offline with:
 
 ```bash
 python3 -m lifeline verify --out out
@@ -105,10 +106,29 @@ truncation is only detectable once an external anchor exists (roadmap).
 SQLite state at `out/incidents.sqlite3`, which the static server deliberately
 does **not** expose. The public judge demo never connects to this API.
 
+Bootstrap the first local administrator once. The command displays a token
+once; store it in your local secret manager rather than a shell history or the
+repository. Other local roles can then be created by entering that token at a
+terminal prompt.
+
+```bash
+lifeline operator init --out out --id anna-coordinator
+lifeline operator add --out out --id field-reporter --role reporter
+lifeline serve --out out
+```
+
+Use the token to call the API. `reader` can inspect incidents and feeds,
+`reporter` can create incidents and append reports, and `coordinator` can
+supersede a report and record an approval. `admin` can provision local roles.
+These are local prototype credentials, not an organization identity system;
+the backend must remain loopback-only until a deployment and identity design is
+reviewed.
+
 Create a validated incident from a schema-v1 scenario:
 
 ```bash
 curl -X POST http://127.0.0.1:8788/api/incidents \
+  -H "Authorization: Bearer $LIFELINE_TOKEN" \
   -H 'Content-Type: application/json' \
   --data-binary @scenarios/flood_v1.json
 ```
@@ -117,11 +137,12 @@ Search incidents, append a typed report, request a sealed plan, or poll the
 append-only feed used by future alert clients:
 
 ```bash
-curl 'http://127.0.0.1:8788/api/incidents?q=flood'
+curl -H "Authorization: Bearer $LIFELINE_TOKEN" 'http://127.0.0.1:8788/api/incidents?q=flood'
 curl -X POST http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/plan \
-  -H 'Content-Type: application/json' -d '{"reference_time":"2026-07-17T11:00:00Z"}'
-curl 'http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/events?after_revision=0'
-curl 'http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/alerts?after_revision=0'
+  -H "Authorization: Bearer $LIFELINE_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"reference_time":"2026-07-17T11:00:00Z"}'
+curl -H "Authorization: Bearer $LIFELINE_TOKEN" 'http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/events?after_revision=0'
+curl -H "Authorization: Bearer $LIFELINE_TOKEN" 'http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/alerts?after_revision=0'
 ```
 
 The current ingestion API is append-only: report additions are validated
@@ -177,7 +198,7 @@ cannot write approval records or dispatch anything.
 
 1. Signed/validated incident ingestion and human verification workflows.
 2. Real routing adapters with explicit freshness and source metadata.
-3. Per-organization roles, approvals, and offline synchronization.
+3. Per-organization identity integration, approval policy, and offline synchronization.
 4. Optional model narration outside the planning authority boundary.
 
 See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md) and

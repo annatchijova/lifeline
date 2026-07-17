@@ -104,9 +104,9 @@
     <p class="sub" id="room-description"></p>
     <div id="overview" class="overview" aria-live="polite"></div>
     <p id="briefingnote" class="briefing-note"></p>
-    <label style="display:block;margin:0 0 12px;font-size:.9rem;color:var(--muted)">
-      <span data-en="Approver ID (declared, not yet verified)" data-es="ID de aprobador/a (declarado, aún no verificado)">Approver ID (declared, not yet verified)</span><br>
-      <input id="approver" maxlength="80" style="margin-top:4px;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:rgba(4,28,45,.7);color:var(--paper);font:inherit;font-size:.95rem">
+    <label id="token-row" style="display:block;margin:0 0 12px;font-size:.9rem;color:var(--muted)">
+      <span data-en="Local coordinator token (kept in this tab only)" data-es="Token local de coordinación (sólo se conserva en esta pestaña)">Local coordinator token (kept in this tab only)</span><br>
+      <input id="operator-token" type="password" autocomplete="off" spellcheck="false" style="margin-top:4px;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:rgba(4,28,45,.7);color:var(--paper);font:inherit;font-size:.95rem">
     </label>
     <div id="proposals"></div>
     <div id="findings" style="display:none;margin-top:18px;padding:11px;border:1px solid rgba(242,199,110,.55);border-radius:9px;font-size:.9rem;color:var(--muted)">
@@ -158,6 +158,7 @@
     const link = document.getElementById("mode-link");
     const description = document.getElementById("room-description");
     if (isDemo) {
+      document.getElementById("token-row").style.display = "none";
       label.textContent = w("Synthetic demo — actions are local and never dispatch", "Demo sintética — las acciones son locales y nunca despachan");
       link.href = "room.html?mode=live";
       link.textContent = w("Open my exported room →", "Abrir mi sala exportada →");
@@ -165,12 +166,13 @@
         "This sealed synthetic scenario exercises the real deterministic kernel. Approve/reject actions update this browser session only; they never dispatch or write an approval record.",
         "Este escenario sintético sellado ejecuta el kernel determinístico real. Las acciones de aprobar/rechazar actualizan sólo esta sesión del navegador; nunca despachan ni escriben un registro de aprobación.");
     } else {
+      document.getElementById("token-row").style.display = "block";
       label.textContent = w("Your local sealed export — no live emergency service", "Tu exportación sellada local — no es un servicio de emergencias en vivo");
       link.href = "room.html?mode=demo";
       link.textContent = w("View the demo →", "Ver la demo →");
       description.textContent = w(
-        "Produced by the deterministic kernel. Nothing is dispatched from this page; decisions are appended to a hash-chained local log only when the local approvals server is running.",
-        "Producido por el kernel determinístico. Esta página no despacha nada; las decisiones se agregan a un registro local encadenado por hash sólo cuando el servidor local de aprobaciones está corriendo.");
+        "Produced by the deterministic kernel. Enter a local coordinator token to inspect or append the hash-chained approval log. Nothing is dispatched from this page.",
+        "Producido por el kernel determinístico. Ingresá un token local de coordinación para inspeccionar o agregar al registro de aprobaciones encadenado por hash. Esta página no despacha nada.");
     }
   }
 
@@ -308,24 +310,28 @@
   }
 
   async function submitDecision(p, action, errorBox) {
-    const approver = (document.getElementById("approver").value || "").trim();
-    if (!approver) {
-      errorBox.textContent = w("Enter an approver ID.", "Ingresá un ID de aprobador/a.");
-      return;
-    }
     if (!state.apiMode) {
-      const entry = { action, approver, request_id: p.request_id, recorded: false, ts: new Date().toISOString() };
+      if (!isDemo) {
+        await loadApprovalChain();
+        if (!state.apiMode) {
+          errorBox.textContent = w("Enter a valid local coordinator token.", "Ingresá un token local de coordinación válido.");
+          return;
+        }
+        return submitDecision(p, action, errorBox);
+      }
+      const entry = { action, approver: w("local demo session", "sesión local de demo"), request_id: p.request_id, recorded: false, ts: new Date().toISOString() };
       state.decisions[p.request_id] = entry;
       state.log.push(entry);
       renderAll();
       return;
     }
     try {
+      const token = (document.getElementById("operator-token").value || "").trim();
       const response = await fetch("/api/approvals", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
-          request_id: p.request_id, action, approver,
+          request_id: p.request_id, action,
           proposal_audit_hash: p.audit_hash, plan_sha256: state.planSha,
         }),
       });
@@ -520,6 +526,32 @@
     state.popupLayers.forEach(({ layer, props }) => layer.setPopupContent(popupFor(props)));
   }
 
+  async function loadApprovalChain() {
+    if (isDemo || state.planIntegrity !== "pass") return;
+    const token = (document.getElementById("operator-token").value || "").trim();
+    if (!token) return;
+    try {
+      const response = await fetch("/api/approvals", { headers: { "Authorization": `Bearer ${token}` } });
+      const listing = await response.json();
+      if (!response.ok) {
+        document.getElementById("notice").style.display = "block";
+        document.getElementById("notice").textContent = listing.error || `error ${response.status}`;
+        return;
+      }
+      state.apiMode = true;
+      state.chain = { ok: listing.chain_ok, count: listing.entries.length, error: listing.chain_error };
+      listing.entries.filter(e => e.plan_sha256 === state.planSha).forEach(e => {
+        const entry = { ...e, recorded: true };
+        state.decisions[e.request_id] = entry;
+        if (!state.log.some(log => log.entry_hash === entry.entry_hash)) state.log.push(entry);
+      });
+      renderAll();
+    } catch {
+      document.getElementById("notice").style.display = "block";
+      document.getElementById("notice").textContent = w("local approvals server unreachable", "servidor local de aprobaciones inaccesible");
+    }
+  }
+
   async function boot() {
     try {
       [state.room, state.plan, state.seal] = await Promise.all([
@@ -617,21 +649,7 @@
     document.getElementById("map").appendChild(state.legend);
 
     state.planSha = state.seal ? state.seal.sha256 : null;
-    if (!isDemo) {
-      try {
-        const response = await fetch("/api/approvals");
-        if (response.ok && state.planIntegrity === "pass") {
-          const listing = await response.json();
-          state.apiMode = true;
-          state.chain = { ok: listing.chain_ok, count: listing.entries.length, error: listing.chain_error };
-          listing.entries.filter(e => e.plan_sha256 === state.planSha).forEach(e => {
-            const entry = { ...e, recorded: true };
-            state.decisions[e.request_id] = entry;
-            state.log.push(entry);
-          });
-        }
-      } catch { /* static serving: local-only mode */ }
-    }
+    if (!isDemo) document.getElementById("operator-token").addEventListener("change", loadApprovalChain);
 
     try {
       const response = await fetch(`${artifactRoot}/simulation.json`);
