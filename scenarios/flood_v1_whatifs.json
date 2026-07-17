@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "simulation_id": "flood-v1-whatifs",
+  "variants": [
+    {
+      "variant_id": "north-route-closed",
+      "label": "North bridge confirmed closed",
+      "assumptions": [
+        "route north-bank -> shelter-a is confirmed closed by an authorized source"
+      ],
+      "overrides": [
+        {"kind": "route", "origin": "north-bank", "destination": "shelter-a", "set": {"open": false}}
+      ]
+    },
+    {
+      "variant_id": "south-access-restored",
+      "label": "South access restored and family-south verified",
+      "assumptions": [
+        "route boat-base -> south-bank reopens after inspection",
+        "route south-bank -> shelter-a is verified by a patrol",
+        "request family-south is confirmed by an authorized operator"
+      ],
+      "overrides": [
+        {"kind": "route", "origin": "boat-base", "destination": "south-bank", "set": {"open": true}},
+        {"kind": "route", "origin": "south-bank", "destination": "shelter-a", "set": {"verification_state": "verified", "freshness": "medium"}},
+        {"kind": "request", "id": "family-south", "set": {"verification_state": "verified"}}
+      ]
+    },
+    {
+      "variant_id": "shelter-a-degraded",
+      "label": "Shelter A loses beds to flooding",
+      "assumptions": [
+        "shelter-a reports 5 open beds instead of 12"
+      ],
+      "overrides": [
+        {"kind": "shelter", "id": "shelter-a", "set": {"beds_open": 5}}
+      ]
+    }
+  ]
+}

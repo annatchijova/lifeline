@@ -72,7 +72,9 @@ def plan_response(
     """Create reproducible proposals; never issue a dispatch or recommendation as authority.
 
     Requests are ordered by declared urgency, then medical need, then the stable ID.
-    Each resource and shelter can appear once. All exclusions become audit reasons.
+    Each resource can appear once; shelter beds are reserved as proposals are
+    produced. A proposal may only use a shelter at the request's declared
+    destination zone. All exclusions become audit reasons.
     """
     resource_pool = tuple(sorted(resources, key=lambda resource: resource.resource_id))
     shelter_pool = tuple(sorted(shelters, key=lambda shelter: shelter.shelter_id))
@@ -98,6 +100,7 @@ def plan_response(
         eligible_shelters = [
             shelter for shelter in shelter_pool
             if shelter.open
+            and shelter.zone == request.destination_zone
             and shelter.beds_open - reserved_beds.get(shelter.shelter_id, 0) >= request.people
             and _route(route_pool, request.pickup_zone, shelter.zone) is not None
         ]
@@ -106,7 +109,7 @@ def plan_response(
             if not eligible_resources:
                 reasons.append("no eligible available resource")
             if not eligible_shelters:
-                reasons.append("no reachable shelter capacity")
+                reasons.append("no reachable destination shelter capacity")
             audit_hash = _audit_hash((request.request_id, "NEEDS_HUMAN_REVIEW", *reasons))
             proposals.append(DispatchProposal(request.request_id, "NEEDS_HUMAN_REVIEW", None, None, None, tuple(reasons), audit_hash))
             continue
@@ -123,7 +126,13 @@ def plan_response(
         outbound = _route(route_pool, request.pickup_zone, shelter.zone)
         assert inbound is not None and outbound is not None
         eta = inbound.eta_minutes + outbound.eta_minutes
-        reasons.extend((f"resource={resource.resource_id}", f"shelter={shelter.shelter_id}", f"eta_minutes={eta}", "human approval required"))
+        reasons.extend((
+            f"resource={resource.resource_id}",
+            f"shelter={shelter.shelter_id}",
+            f"destination={request.destination_zone}",
+            f"eta_minutes={eta}",
+            "human approval required",
+        ))
         used_resources.add(resource.resource_id)
         reserved_beds[shelter.shelter_id] = reserved_beds.get(shelter.shelter_id, 0) + request.people
         audit_hash = _audit_hash((request.request_id, "PROPOSED", *reasons))
