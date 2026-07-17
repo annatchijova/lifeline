@@ -1,14 +1,44 @@
 # LIFELINE
 
-**Open infrastructure for humanitarian coordination.**
+### When the water rises, the first enemy is not the flood. It is the fog.
 
-LIFELINE is a decision-support system for incident coordinators. It turns
-verified operational facts — requests for help, available resources, routes,
-and shelter capacity — into a transparent proposed dispatch plan.
+In the opening hours of a disaster, people are rarely lost for lack of boats or
+beds. They are lost for lack of a shared picture. Which family called. Which
+road is still open. Which shelter still has room. Which boat already left, and
+where it went. The facts exist — scattered across radios, spreadsheets, and the
+memory of exhausted people. No one can see them whole, in time.
 
-It does not autonomously dispatch responders, determine who is rescued, or
-claim to predict survival. A human coordinator remains responsible for every
-operational decision.
+The tempting fix is to hand the whole mess to an algorithm and let it decide who
+gets rescued first. **LIFELINE refuses to do that — on purpose.**
+
+LIFELINE is open infrastructure for humanitarian coordination that makes the
+truth *inspectable* and leaves the decision with a human. It turns verified
+operational facts — requests for help, available resources, open routes, shelter
+capacity — into a transparent, reproducible dispatch **proposal**. Then it
+stops. It never sends a responder. It never ranks whose life matters more. It
+never claims to predict who survives. A coordinator makes every call and carries
+every consequence — but now they can see the whole board while they do.
+
+Because when a machine gets a disaster decision wrong, *"the algorithm chose"* is
+not an answer anyone can live with. So LIFELINE is built the other way around: a
+person is always the one who chooses, every fact behind that choice has a
+source, every proposal waits for a human yes, and every action is sealed into an
+audit trail that cannot be quietly rewritten.
+
+> **The map is not the decision. The person is.**
+
+## Three commitments — written into the code, not just the pitch
+
+- **Facts have sources.** A request, resource, route, or shelter must be
+  verified and fresh before it can shape a plan. Contradictions are downgraded,
+  never averaged away. LIFELINE would rather say *"I can't corroborate this"*
+  than proceed on a guess.
+- **Feasible is explicit.** Capacity, route status, availability, medical
+  compatibility — hard constraints checked deterministically, not a model's
+  hunch. When a rescue can't be proposed, LIFELINE says exactly why.
+- **People stay accountable.** Every proposed action waits for an authorized
+  human, and every decision is written into a hash-chained, tamper-evident
+  ledger. You can always answer *who decided, on what evidence, and when.*
 
 ## First vertical slice
 
