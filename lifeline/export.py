@@ -215,3 +215,37 @@ def export_plan(scenario_path: str | Path, out_dir: str | Path, reference_time: 
     (out / "room.geojson").write_text(
         json.dumps(room_geojson(scenario, proposals, findings), indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     return ExportResult(seal, scenario, proposals, findings)
+
+
+def export_simulation(
+    scenario_path: str | Path,
+    whatifs_path: str | Path,
+    out_dir: str | Path,
+    reference_time: str | None = None,
+) -> dict:
+    """Run the declared what-if variants and write simulation.json plus its seal."""
+    from lifeline.simulate import load_whatifs, simulate_payload
+
+    scenario_path = Path(scenario_path)
+    whatifs_path = Path(whatifs_path)
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    scenario = load_scenario(scenario_path)
+    simulation_id, variants = load_whatifs(whatifs_path)
+    payload = simulate_payload(scenario, simulation_id, variants, reference_time)
+    digest = seal_digest(payload)
+
+    (out / "simulation.json").write_text(
+        json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    seal = {
+        "sha256": digest,
+        "canonicalize_version": CANONICALIZE_VERSION,
+        "simulation_version": payload["simulation_version"],
+        "scenario_sha256": sha256(scenario_path.read_bytes()).hexdigest(),
+        "whatifs_sha256": sha256(whatifs_path.read_bytes()).hexdigest(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    (out / "simulation.seal.json").write_text(
+        json.dumps(seal, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    return seal

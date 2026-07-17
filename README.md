@@ -77,6 +77,22 @@ This recomputes the plan seal and checks the approvals chain; altered,
 inserted, reordered, or dropped interior entries fail verification. Tail
 truncation is only detectable once an external anchor exists (roadmap).
 
+## Simulate alternatives
+
+```bash
+python3 -m lifeline simulate scenarios/flood_v1.json scenarios/flood_v1_whatifs.json \
+  --out out --reference-time 2026-07-17T11:00:00Z
+```
+
+Variants are declared, explicit overlays on the base scenario ("north bridge
+confirmed closed", "shelter loses beds"). Each variant is re-corroborated and
+re-planned by the same deterministic pipeline, and `simulation.json` records
+the per-request differences against the base plan, the assumptions, the
+findings, and the model limitations — sealed in `simulation.seal.json` and
+checked by `verify`. No score ranks the variants and no winner is chosen;
+the room shows them as alternatives for a human to weigh. Simulated results
+are never live facts.
+
 The landing page remains at `http://127.0.0.1:8788/web/` with illustrative
 content. See `docs/adr/0001-map-stack.md` for the map stack decision and the
 float boundary.

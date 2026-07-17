@@ -26,6 +26,13 @@ def main(argv: list[str] | None = None) -> int:
              "without it staleness checks are skipped and reported as unchecked",
     )
 
+    simulate_parser = subparsers.add_parser(
+        "simulate", help="run declared what-if variants and write a sealed comparison")
+    simulate_parser.add_argument("scenario", help="path to a schema-v1 scenario JSON file")
+    simulate_parser.add_argument("whatifs", help="path to a what-ifs JSON file with explicit variants")
+    simulate_parser.add_argument("--out", default="out")
+    simulate_parser.add_argument("--reference-time", help="ISO 8601 time (with timezone) for freshness corroboration")
+
     serve_parser = subparsers.add_parser("serve", help="serve the incident room and approvals API on loopback")
     serve_parser.add_argument("--out", default="out", help="directory holding the exported plan (default: out)")
     serve_parser.add_argument("--port", type=int, default=8788)
@@ -42,6 +49,19 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "verify":
         return _verify(Path(args.out))
+
+    if args.command == "simulate":
+        from lifeline.export import export_simulation
+        from lifeline.simulate import SimulationError
+        try:
+            seal = export_simulation(args.scenario, args.whatifs, args.out, args.reference_time)
+        except (ScenarioError, SimulationError) as error:
+            print(f"simulation rejected: {error}", file=sys.stderr)
+            return 2
+        print(f"simulation sealed sha256={seal['sha256']}")
+        print(f"wrote simulation.json, simulation.seal.json to {args.out}/")
+        print("simulated alternatives are not live facts; no winner is selected")
+        return 0
 
     try:
         result = export_plan(args.scenario, args.out, args.reference_time)
@@ -77,6 +97,21 @@ def _verify(out_dir: Path) -> int:
         else:
             print("plan seal: FAIL (plan.json does not match plan.seal.json)")
             failed = True
+
+    sim_path = out_dir / "simulation.json"
+    sim_seal_path = out_dir / "simulation.seal.json"
+    if sim_path.exists() or sim_seal_path.exists():
+        if not (sim_path.exists() and sim_seal_path.exists()):
+            print("simulation seal: FAIL (simulation.json and simulation.seal.json must both exist)")
+            failed = True
+        else:
+            sim = json.loads(sim_path.read_text(encoding="utf-8"))
+            sim_seal = json.loads(sim_seal_path.read_text(encoding="utf-8"))
+            if seal_digest(sim) == sim_seal.get("sha256"):
+                print(f"simulation seal: PASS (sha256={sim_seal['sha256']})")
+            else:
+                print("simulation seal: FAIL (simulation.json does not match simulation.seal.json)")
+                failed = True
 
     approvals_path = out_dir / "approvals.jsonl"
     if not approvals_path.exists():

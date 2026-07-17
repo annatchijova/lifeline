@@ -84,6 +84,11 @@
       <b style="color:var(--gold);display:block;margin-bottom:5px;font-size:.72rem;letter-spacing:.08em" data-en="VALIDATION FINDINGS (SEALED WITH THE PLAN)" data-es="HALLAZGOS DE VALIDACIÓN (SELLADOS CON EL PLAN)">VALIDATION FINDINGS (SEALED WITH THE PLAN)</b>
       <div id="findingslist"></div>
     </div>
+    <div id="simulation" style="display:none;margin-top:18px;padding:11px;border:1px solid var(--line);border-radius:9px;font-size:.75rem;color:var(--muted)">
+      <b style="color:var(--water);display:block;margin-bottom:5px;font-size:.72rem;letter-spacing:.08em" data-en="SIMULATED ALTERNATIVES — DECLARED ASSUMPTIONS, NOT LIVE FACTS" data-es="ALTERNATIVAS SIMULADAS — SUPUESTOS DECLARADOS, NO HECHOS EN VIVO">SIMULATED ALTERNATIVES — DECLARED ASSUMPTIONS, NOT LIVE FACTS</b>
+      <div id="simlist"></div>
+      <p id="simlimits" style="margin:8px 0 0;font-size:.68rem;color:#5a7d8a"></p>
+    </div>
     <div id="humanlog"><b data-en="PENDING HUMAN ACTION LOG (LOCAL ONLY)" data-es="REGISTRO LOCAL DE ACCIONES HUMANAS PENDIENTES">PENDING HUMAN ACTION LOG (LOCAL ONLY)</b><p data-en="No local actions yet." data-es="Todavía no hay acciones locales.">No local actions yet.</p></div>
   </aside>
 </main>
@@ -240,6 +245,31 @@
     });
   }
 
+  function renderSimulation(sim) {
+    const box = document.getElementById("simulation");
+    const list = document.getElementById("simlist");
+    box.style.display = "block";
+    sim.variants.forEach(v => {
+      const card = document.createElement("div");
+      card.style.cssText = "margin:9px 0;padding:9px;border-left:3px solid var(--water);background:rgba(89,201,222,.06);border-radius:0 7px 7px 0";
+      const changed = v.diff.filter(d => d.changed);
+      const lines = changed.length
+        ? changed.map(d => {
+            const before = d.base.status === "PROPOSED"
+              ? `PROPOSED (${esc(d.base.resource_id)}, ${d.base.eta_minutes} min)` : d.base.status;
+            const after = d.variant.status === "PROPOSED"
+              ? `PROPOSED (${esc(d.variant.resource_id)}, ${d.variant.eta_minutes} min)` : d.variant.status;
+            return `<p style="margin:3px 0">${esc(d.request_id)}: ${before} &rarr; <b>${after}</b></p>`;
+          }).join("")
+        : `<p style="margin:3px 0;color:#5a7d8a">no plan change under these assumptions</p>`;
+      card.innerHTML = `<b style="font-size:.74rem">${esc(v.label)}</b>
+        <ul style="margin:5px 0;padding-left:16px">${v.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
+        ${lines}`;
+      list.appendChild(card);
+    });
+    document.getElementById("simlimits").textContent = (sim.limitations || []).join(" · ");
+  }
+
   async function boot() {
     let room, plan, seal;
     try {
@@ -328,6 +358,11 @@
       document.getElementById("sealinfo").innerHTML =
         `plan seal sha256 <code>${esc(seal.sha256)}</code> · scenario <code>${esc(seal.scenario_sha256.slice(0, 16))}…</code>${chainNote}`;
     }
+
+    try {
+      const response = await fetch("../out/simulation.json");
+      if (response.ok) renderSimulation(await response.json());
+    } catch { /* no simulation exported */ }
   }
 
   setLanguage("en");
