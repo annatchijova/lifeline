@@ -55,5 +55,6 @@ Open `http://127.0.0.1:8788`.
 3. Per-organization roles, approvals, and offline synchronization.
 4. Optional model narration outside the planning authority boundary.
 
-See [LIFELINE OS](docs/LIFELINE_OS.md) for the product architecture, ethical
-boundaries, simulation model, and the research patterns that inform it.
+See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md) and
+[LIFELINE OS (Español)](docs/LIFELINE_OS.md) for the product architecture,
+ethical boundaries, simulation model, and the research patterns that inform it.
