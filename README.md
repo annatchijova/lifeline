@@ -106,6 +106,13 @@ truncation is only detectable once an external anchor exists (roadmap).
 SQLite state at `out/incidents.sqlite3`, which the static server deliberately
 does **not** expose. The public judge demo never connects to this API.
 
+With the local server running, open
+`http://127.0.0.1:8788/web/ops.html` for a bilingual operations console. It
+keeps the entered token only in the active tab and provides incident search,
+schema-v1 scenario creation, typed report append/correction, sealed-plan
+recomputation, and a 15-second polling attention feed. It is intentionally not
+a public hosted console and does not send alerts to external channels.
+
 Bootstrap the first local administrator once. The command displays a token
 once; store it in your local secret manager rather than a shell history or the
 repository. Other local roles can then be created by entering that token at a
