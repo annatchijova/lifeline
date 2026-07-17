@@ -4,3 +4,4 @@ __pycache__/
 venv/
 lifeline.db
 private-scenarios/
+out/
