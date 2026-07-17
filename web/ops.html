@@ -16,4 +16,91 @@
 </main>
 <script>
 (()=>{const root=document.documentElement,state={token:"",incident:null,alertRevision:0},el=id=>document.getElementById(id),text=(en,es)=>root.dataset.language==="es"?es:en,headers=()=>({Authorization:`Bearer ${state.token}`,"Content-Type":"application/json"});function lang(language){root.lang=language;root.dataset.language=language;document.querySelectorAll("[data-en][data-es]").forEach(node=>node.textContent=node.dataset[language]);document.querySelectorAll("[data-language]").forEach(button=>button.setAttribute("aria-pressed",String(button.dataset.language===language)))}document.querySelectorAll("[data-language]").forEach(button=>button.addEventListener("click",()=>lang(button.dataset.language)));const show=(id,message)=>el(id).textContent=message;async function api(path,options={}){const response=await fetch(path,{...options,headers:{...headers(),...(options.headers||{})}}),body=await response.json().catch(()=>({}));if(!response.ok)throw Error(body.error||`HTTP ${response.status}`);return body}async function search(){if(!state.token)return connect();try{const result=await api(`/api/incidents?q=${encodeURIComponent(el("query").value.trim())}`),holder=el("incidents");holder.innerHTML="";if(!result.incidents.length){holder.textContent=text("No matching incidents.","No hay incidentes coincidentes.");return}result.incidents.forEach(incident=>{const button=document.createElement("button");button.className=`incident ${state.incident===incident.incident_id?"active":""}`;button.textContent=`${incident.incident_id} · r${incident.revision}`;button.onclick=()=>select(incident.incident_id);holder.append(button)})}catch(error){show("incidents",error.message)}}async function connect(){state.token=el("token").value.trim();if(!state.token){el("connection").className="warning";show("connection",text("Enter a local token to connect.","Ingresá un token local para conectar."));return}try{await api("/api/incidents");el("connection").className="ok";show("connection",text("Connected to the local LIFELINE server. Your token stays in this tab only.","Conectado al servidor local LIFELINE. El token queda sólo en esta pestaña."));search()}catch(error){el("connection").className="warning";show("connection",`${text("Not connected: ","Sin conexión: ")}${error.message}`)}}async function select(id){try{const incident=await api(`/api/incidents/${encodeURIComponent(id)}`);state.incident=incident.incident_id;state.alertRevision=0;show("selected",`${incident.incident_id} · ${text("revision","revisión")} ${incident.revision}\nsha256 ${incident.scenario_sha256}`);search();alerts()}catch(error){show("selected",error.message)}}async function create(){const file=el("scenario-file").files[0];if(!file){show("create-result",text("Choose a scenario JSON file first.","Elegí primero un archivo JSON de escenario."));return}try{const created=await api("/api/incidents",{method:"POST",body:JSON.stringify(JSON.parse(await file.text()))});show("create-result",`${text("Created","Creado")} ${created.incident_id} · r${created.revision}`);select(created.incident_id)}catch(error){show("create-result",error.message)}}async function write(correction){if(!state.incident){show("report-result",text("Select an incident first.","Seleccioná primero un incidente."));return}try{const action=correction?"corrections":"reports",result=await api(`/api/incidents/${encodeURIComponent(state.incident)}/${action}`,{method:"POST",body:JSON.stringify({entity_type:el("entity").value,report:JSON.parse(el("report").value)})});show("report-result",`${correction?text("Correction recorded","Corrección registrada"):text("Report appended","Reporte agregado")} · r${result.revision}`);select(state.incident)}catch(error){show("report-result",error.message)}}async function plan(){if(!state.incident){show("plan-result",text("Select an incident first.","Seleccioná primero un incidente."));return}try{const result=await api(`/api/incidents/${encodeURIComponent(state.incident)}/plan`,{method:"POST",body:JSON.stringify({reference_time:new Date().toISOString()})}),proposals=result.plan.proposals||[],proposed=proposals.filter(item=>item.status==="PROPOSED").length;show("plan-result",`${text("Sealed plan","Plan sellado")} r${result.revision}: ${proposed}/${proposals.length} ${text("proposals awaiting human decision","propuestas esperando decisión humana")}\nsha256 ${result.seal.sha256}`)}catch(error){show("plan-result",error.message)}}async function alerts(){if(!state.incident||!state.token)return;try{const result=await api(`/api/incidents/${encodeURIComponent(state.incident)}/alerts?after_revision=${state.alertRevision}`),holder=el("alerts");if(state.alertRevision===0)holder.innerHTML="";result.alerts.forEach(alert=>{const item=document.createElement("div");item.className=`alert ${alert.severity}`;item.textContent=`${alert.code} · r${alert.revision} · ${alert.detail} · authority: ${alert.dispatch_authority}`;holder.prepend(item);state.alertRevision=Math.max(state.alertRevision,alert.revision)});if(!holder.children.length)holder.textContent=text("No attention alerts in the selected feed yet.","Todavía no hay alertas de atención en el feed seleccionado.")}catch(error){show("alerts",error.message)}}el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=create;el("append").onclick=()=>write(false);el("correct").onclick=()=>write(true);el("plan").onclick=plan;window.setInterval(alerts,15000);lang("en")})();
+</script>
+<script>
+/* Kept separate from the console shell so approval rendering stays a small,
+   inspectable adapter over the sealed incident-plan endpoint. */
+(() => {
+  const root = document.documentElement;
+  const planButton = document.getElementById("plan");
+  const planResult = document.getElementById("plan-result");
+  const selected = document.getElementById("selected");
+  const token = document.getElementById("token");
+  const word = (en, es) => root.dataset.language === "es" ? es : en;
+  const incidentId = () => selected.textContent.split(" · ")[0].trim();
+  const auth = () => ({ "Authorization": `Bearer ${token.value.trim()}`, "Content-Type": "application/json" });
+  let current = null;
+
+  function message(text) {
+    planResult.textContent = text;
+  }
+
+  async function request(path, body) {
+    const response = await fetch(path, { method: "POST", headers: auth(), body: JSON.stringify(body) });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
+    return payload;
+  }
+
+  function proposalCard(proposal) {
+    const card = document.createElement("div");
+    card.className = "alert";
+    const title = document.createElement("b");
+    title.textContent = proposal.status === "PROPOSED"
+      ? `${proposal.resource_id} → ${proposal.request_id} → ${proposal.shelter_id} · ${proposal.eta_minutes} min`
+      : `${proposal.request_id} · ${word("REVIEW REQUIRED", "REVISIÓN REQUERIDA")}`;
+    card.append(title);
+    const reasons = document.createElement("div");
+    reasons.textContent = proposal.reasons.join(" · ");
+    card.append(reasons);
+    if (proposal.status !== "PROPOSED") return card;
+
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    [[word("Approve", "Aprobar"), "approve"], [word("Reject", "Rechazar"), "reject"]].forEach(([label, action]) => {
+      const button = document.createElement("button");
+      button.textContent = label;
+      button.className = action === "reject" ? "warn" : "";
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          const result = await request(`/api/incidents/${encodeURIComponent(current.incident_id)}/approvals`, {
+            request_id: proposal.request_id,
+            action,
+            proposal_audit_hash: proposal.audit_hash,
+            plan_sha256: current.seal.sha256,
+            reference_time: current.plan.reference_time,
+          });
+          actions.textContent = `${word("Recorded in incident approval chain", "Registrado en la cadena de aprobaciones del incidente")} #${result.entry.index} · ${result.entry.approver}`;
+        } catch (error) {
+          button.disabled = false;
+          actions.textContent = error.message;
+        }
+      });
+      actions.append(button);
+    });
+    card.append(actions);
+    return card;
+  }
+
+  async function renderPlan() {
+    const id = incidentId();
+    if (!id || id === word("No incident selected.", "No hay incidente seleccionado.")) {
+      message(word("Select an incident first.", "Seleccioná primero un incidente."));
+      return;
+    }
+    try {
+      current = await request(`/api/incidents/${encodeURIComponent(id)}/plan`, { reference_time: new Date().toISOString() });
+      planResult.innerHTML = "";
+      const summary = document.createElement("div");
+      summary.textContent = `${word("Sealed plan", "Plan sellado")} r${current.revision} · sha256 ${current.seal.sha256}`;
+      planResult.append(summary);
+      current.plan.proposals.forEach(proposal => planResult.append(proposalCard(proposal)));
+    } catch (error) {
+      message(error.message);
+    }
+  }
+
+  planButton.onclick = renderPlan;
+})();
 </script></body></html>
