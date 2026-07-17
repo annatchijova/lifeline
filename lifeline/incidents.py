@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 
+from lifeline.approvals import ACTIONS, ApprovalChainError, append_entry, read_entries, verify_chain
 from lifeline.export import plan_payload, seal_digest
 from lifeline.scenario import ScenarioError, parse_scenario, plan_scenario
 from lifeline.validators import validate_scenario
@@ -276,7 +277,22 @@ class IncidentStore:
             incident_ids = [row["incident_id"] for row in conn.execute("SELECT incident_id FROM incidents ORDER BY incident_id")]
             for incident_id in incident_ids:
                 self._verified_snapshot(conn, incident_id)
+                self.approvals(incident_id)
         return len(incident_ids)
+
+    def _approval_path(self, incident_id: str) -> Path:
+        # The identifier never becomes a filename; the static server cannot expose this directory.
+        return self.path.parent / "incident-approvals" / f"{sha256(incident_id.encode('utf-8')).hexdigest()}.jsonl"
+
+    def approvals(self, incident_id: str) -> list[dict]:
+        with self._connect() as conn:
+            self._verified_snapshot(conn, incident_id)
+        try:
+            entries = read_entries(self._approval_path(incident_id))
+            verify_chain(entries)
+        except ApprovalChainError as error:
+            raise IncidentStoreError(f"incident '{incident_id}' approvals chain failed verification: {error}") from error
+        return entries
 
     def add_report(self, incident_id: str, entity_type: str, report: dict) -> IncidentSnapshot:
         if entity_type not in ENTITY_COLLECTIONS:
@@ -390,6 +406,9 @@ class IncidentStore:
             raise IncidentStoreError(str(error)) from error
         proposals = plan_scenario(scenario)
         payload = plan_payload(scenario, proposals, findings, reference_time)
+        # Unlike a standalone export, this plan is bound to a persisted state revision.
+        payload["incident_revision"] = snapshot.revision
+        payload["incident_scenario_sha256"] = snapshot.scenario_sha256
         return {
             "incident_id": incident_id,
             "revision": snapshot.revision,
@@ -400,3 +419,38 @@ class IncidentStore:
                 "plan_version": payload["plan_version"],
             },
         }
+
+    def record_approval(
+        self,
+        incident_id: str,
+        *,
+        request_id: str,
+        action: str,
+        approver: str,
+        proposal_audit_hash: str,
+        plan_sha256: str,
+        reference_time: str | None,
+    ) -> dict:
+        if action not in ACTIONS:
+            raise IncidentStoreError(f"action must be one of {list(ACTIONS)}")
+        plan = self.plan(incident_id, reference_time)
+        if plan["seal"]["sha256"] != plan_sha256:
+            raise IncidentConflict("stale incident plan: revision, evidence, or reference time changed; recompute before deciding")
+        proposal = next((item for item in plan["plan"]["proposals"] if item["request_id"] == request_id), None)
+        if proposal is None:
+            raise IncidentConflict("unknown request_id for the current incident plan")
+        if proposal["status"] != "PROPOSED":
+            raise IncidentConflict("only PROPOSED items accept an approval decision")
+        if proposal["audit_hash"] != proposal_audit_hash:
+            raise IncidentConflict("stale proposal: audit hash does not match the current incident plan")
+        try:
+            entries = self.approvals(incident_id)
+            if any(entry["request_id"] == request_id and entry["plan_sha256"] == plan_sha256 for entry in entries):
+                raise IncidentConflict("a decision for this proposal is already recorded")
+            return append_entry(
+                self._approval_path(incident_id), request_id=request_id, action=action,
+                approver=approver, proposal_audit_hash=proposal_audit_hash,
+                plan_sha256=plan_sha256, recorded_at=_utc_now(),
+            )
+        except ApprovalChainError as error:
+            raise IncidentStoreError(f"incident '{incident_id}' approvals chain failed verification: {error}") from error

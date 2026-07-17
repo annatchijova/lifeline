@@ -212,3 +212,14 @@ def test_incident_api_creates_searches_appends_and_plans(room):
     }, token)
     assert status == 200
     assert planned["revision"] == 3 and planned["seal"]["sha256"]
+
+    proposal = _proposed(planned["plan"])
+    status, recorded = _post_to(base, "/api/incidents/flood-v1-synthetic/approvals", {
+        "request_id": proposal["request_id"], "action": "approve",
+        "proposal_audit_hash": proposal["audit_hash"], "plan_sha256": planned["seal"]["sha256"],
+        "reference_time": "2026-07-17T11:00:00Z",
+    }, token)
+    assert status == 201 and recorded["entry"]["approver"] == "test-admin"
+
+    status, approvals = _get_json(base, "/api/incidents/flood-v1-synthetic/approvals", token)
+    assert status == 200 and approvals["chain_ok"] is True and len(approvals["entries"]) == 1

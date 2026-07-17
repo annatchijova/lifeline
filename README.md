@@ -169,6 +169,22 @@ External channels (email, SMS, WhatsApp, pager) are intentionally not wired
 until recipient identity, authorization, consent, and delivery failure policy
 are defined.
 
+Plans produced from a persisted incident have their own approval ledger. The
+plan includes the incident revision and scenario digest inside its seal; a
+coordinator can only record a decision against that exact plan. If a report,
+correction, or reference time changes, the old plan hash is rejected as stale.
+
+```bash
+curl -X POST http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/approvals \
+  -H "Authorization: Bearer $LIFELINE_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"request_id":"family-north","action":"approve","proposal_audit_hash":"…","plan_sha256":"…","reference_time":"2026-07-17T11:00:00Z"}'
+curl -H "Authorization: Bearer $LIFELINE_TOKEN" \
+  'http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/approvals'
+```
+
+The second endpoint exposes the per-incident hash chain. It records a human
+decision; it never dispatches a resource.
+
 ## Simulate alternatives
 
 ```bash

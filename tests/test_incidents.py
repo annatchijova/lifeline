@@ -114,3 +114,26 @@ def test_verify_all_returns_count_for_intact_ledger(tmp_path):
     store.create(_scenario())
 
     assert store.verify_all() == 1
+
+
+def test_incident_approval_is_bound_to_the_sealed_persisted_revision(tmp_path):
+    store = IncidentStore(tmp_path / "incidents.sqlite3")
+    created = store.create(_scenario())
+    plan = store.plan(created.incident_id, "2026-07-17T11:00:00Z")
+    proposal = next(item for item in plan["plan"]["proposals"] if item["status"] == "PROPOSED")
+
+    entry = store.record_approval(
+        created.incident_id, request_id=proposal["request_id"], action="approve", approver="anna-coordinator",
+        proposal_audit_hash=proposal["audit_hash"], plan_sha256=plan["seal"]["sha256"],
+        reference_time="2026-07-17T11:00:00Z",
+    )
+    assert entry["approver"] == "anna-coordinator"
+    assert store.approvals(created.incident_id)[0]["entry_hash"] == entry["entry_hash"]
+
+    store.add_report(created.incident_id, "request", _request("family-revision-two"))
+    with pytest.raises(IncidentConflict, match="stale incident plan"):
+        store.record_approval(
+            created.incident_id, request_id=proposal["request_id"], action="reject", approver="anna-coordinator",
+            proposal_audit_hash=proposal["audit_hash"], plan_sha256=plan["seal"]["sha256"],
+            reference_time="2026-07-17T11:00:00Z",
+        )

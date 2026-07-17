@@ -12,6 +12,7 @@ Endpoints:
   GET    /api/incidents/{id}/events?after_revision=N -> append-only event feed
   GET    /api/incidents/{id}/alerts?after_revision=N -> deterministic attention feed
   POST   /api/incidents/{id}/plan -> seal a plan from the stored revision
+  GET/POST /api/incidents/{id}/approvals -> verified per-incident decision ledger
   GET  /api/approvals   -> {"entries": [...], "chain_ok": bool, "chain_error": str|null}
   POST /api/approvals   -> record one decision for a PROPOSED item of the
                            current sealed plan; 409 on stale plan/proposal
@@ -281,6 +282,10 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 events = self.server.incidents.events(incident_id, after_revision)
                 self._send_json(200, {"incident_id": incident_id, "alerts": alerts_from_events(events)})
                 return
+            if action == "approvals":
+                entries = self.server.incidents.approvals(incident_id)
+                self._send_json(200, {"incident_id": incident_id, "entries": entries, "chain_ok": True})
+                return
             raise ApiError(404, "unknown incidents endpoint")
         except IncidentNotFound as error:
             self._send_json(404, {"error": str(error)})
@@ -317,6 +322,21 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 if reference_time is not None and not isinstance(reference_time, str):
                     raise ApiError(400, "reference_time must be a string or null")
                 self._send_json(200, self.server.incidents.plan(incident_id, reference_time))
+                return
+            if action == "approvals":
+                operator = self._operator("coordinator")
+                for field in ("request_id", "action", "proposal_audit_hash", "plan_sha256"):
+                    if not isinstance(body.get(field), str) or not body[field].strip():
+                        raise ApiError(400, f"field '{field}' must be a non-empty string")
+                reference_time = body.get("reference_time")
+                if reference_time is not None and not isinstance(reference_time, str):
+                    raise ApiError(400, "reference_time must be a string or null")
+                entry = self.server.incidents.record_approval(
+                    incident_id, request_id=body["request_id"].strip(), action=body["action"].strip(),
+                    approver=operator.operator_id, proposal_audit_hash=body["proposal_audit_hash"].strip(),
+                    plan_sha256=body["plan_sha256"].strip(), reference_time=reference_time,
+                )
+                self._send_json(201, {"entry": entry})
                 return
             raise ApiError(404, "unknown incidents endpoint")
         except IncidentNotFound as error:
