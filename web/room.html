@@ -7,19 +7,35 @@
   <title>LIFELINE — Incident room</title>
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <style>
-    :root{--ocean:#34424e;--deep:#202b35;--water:#8fb3c9;--coral:#c9a58f;--gold:#a58fc9;--green:#b3c98f;--blue:#8fb3c9;--paper:#f7f5f0;--muted:#d9e0df;--line:rgba(247,245,240,.22)}
+    /* Crisis palette: one semantic semaphore shared with ops.html.
+       verified/approve = green, attention/review/pending = amber,
+       critical/reject/conflicting = red, neutral info = blue.
+       Legacy names (--coral, --gold, --water, --blue) are kept as aliases
+       so existing var() usages render the corrected colour without a rename
+       sweep — the old values misnamed a beige as "coral" and a lavender as
+       "gold", which is exactly why states were unreadable under stress. */
+    :root{
+      --ocean:#1f2732;--deep:#151b23;--paper:#f6f8fb;--muted:#c7d1dd;
+      --line:rgba(246,248,251,.18);
+      --info:#5ab0ea;--water:#5ab0ea;--blue:#5ab0ea;
+      --ok:#3fc76a;--green:#3fc76a;
+      --warn:#ffb224;--gold:#ffb224;
+      --danger:#ff5a60;--coral:#ff5a60}
     *{box-sizing:border-box}
     body{margin:0;height:100vh;display:flex;flex-direction:column;color:var(--paper);background:var(--ocean);font:17px/1.5 Arial,Helvetica,ui-sans-serif,sans-serif}
+    .demo-ribbon{flex:0 0 auto;display:flex;gap:9px;align-items:center;justify-content:center;flex-wrap:wrap;padding:9px 16px;background:var(--warn);color:#241700;font-weight:800;font-size:.92rem;letter-spacing:.01em;text-align:center;border-bottom:2px solid rgba(0,0,0,.28)}
+    .demo-ribbon strong{font-weight:900;letter-spacing:.14em}
+    .demo-ribbon code{background:rgba(0,0,0,.17);padding:1px 7px;border-radius:5px;font-weight:700;font-size:.88em}
     header{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line)}
     .brand{font-weight:900;letter-spacing:.13em;font-size:1rem}
     .brand:before{content:"\2726";color:var(--water);margin-right:9px}
-    .tag{padding:5px 10px;border:1px solid rgba(201,165,143,.75);border-radius:7px;color:#f4e7de;background:rgba(32,43,53,.55);font-size:.85rem}
+    .tag{padding:5px 10px;border:1px solid var(--line);border-radius:7px;color:var(--muted);background:rgba(21,27,35,.55);font-size:.85rem}
     header a{margin-left:auto;color:var(--paper);font-size:.9rem}
     .lang{display:flex;padding:3px;border:1px solid var(--line);border-radius:99px}
     .lang button{border:0;border-radius:99px;padding:6px 12px;background:transparent;color:var(--paper);font-weight:800;cursor:pointer;font-size:.85rem}
     .lang button[aria-pressed=true]{color:var(--deep);background:var(--water)}
     main{flex:1;display:grid;grid-template-columns:54% 46%;min-height:0}
-    #map{min-height:0;background:linear-gradient(128deg,transparent 0 35%,rgba(143,179,201,.45) 35% 39%,transparent 39% 67%,rgba(165,143,201,.18) 67%),repeating-linear-gradient(0deg,transparent 0 68px,rgba(247,245,240,.07) 69px 70px),repeating-linear-gradient(90deg,transparent 0 68px,rgba(247,245,240,.07) 69px 70px),#2b3a46}
+    #map{min-height:0;background:linear-gradient(128deg,transparent 0 35%,rgba(90,176,234,.32) 35% 39%,transparent 39% 67%,rgba(90,176,234,.14) 67%),repeating-linear-gradient(0deg,transparent 0 68px,rgba(246,248,251,.06) 69px 70px),repeating-linear-gradient(90deg,transparent 0 68px,rgba(246,248,251,.06) 69px 70px),#1c242e}
     aside{overflow-y:auto;padding:16px;border-left:1px solid var(--line);background:rgba(32,43,53,.88)}
     aside h2{margin:0 0 4px;font-size:1.25rem}
     aside .sub{margin:0 0 14px;color:var(--muted);font-size:.95rem}
@@ -27,37 +43,37 @@
     .metric{padding:10px;border:1px solid var(--line);border-radius:8px;background:rgba(32,43,53,.42)}
     .metric b{display:block;font-size:1.35rem;line-height:1;color:var(--paper)}
     .metric span{display:block;margin-top:5px;color:var(--muted);font-size:.76rem;font-weight:700;letter-spacing:.04em}
-    .metric.review{border-color:rgba(165,143,201,.75)} .metric.warn{border-color:rgba(201,165,143,.75)}
-    .briefing-note{margin:0 0 14px;padding:9px 11px;border-left:3px solid var(--water);background:rgba(143,179,201,.1);color:var(--muted);font-size:.84rem}
-    .proposal{margin:12px 0;padding:14px;border:1px solid rgba(143,179,201,.38);border-left:5px solid var(--water);border-radius:10px;background:rgba(143,179,201,.11)}
-    .proposal.proposed{border-color:rgba(179,201,143,.62);border-left-color:var(--green);background:rgba(179,201,143,.10)}
-    .proposal.review{border-color:rgba(165,143,201,.7);border-left-color:var(--gold);background:rgba(165,143,201,.15)}
+    .metric.review{border-color:rgba(255,178,36,.8)} .metric.warn{border-color:rgba(255,90,96,.8)}
+    .briefing-note{margin:0 0 14px;padding:9px 11px;border-left:3px solid var(--info);background:rgba(90,176,234,.12);color:var(--muted);font-size:.84rem}
+    .proposal{margin:12px 0;padding:14px;border:1px solid rgba(90,176,234,.4);border-left:5px solid var(--info);border-radius:10px;background:rgba(90,176,234,.1)}
+    .proposal.proposed{border-color:rgba(63,199,106,.66);border-left-color:var(--ok);background:rgba(63,199,106,.12)}
+    .proposal.review{border-color:rgba(255,178,36,.72);border-left-color:var(--warn);background:rgba(255,178,36,.14)}
     .proposal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
     .proposal b{display:block;font-size:1rem;letter-spacing:.02em;line-height:1.25}
     .status-pill,.priority{display:inline-flex;align-items:center;border-radius:99px;padding:4px 8px;font-size:.72rem;font-weight:900;letter-spacing:.06em;line-height:1.2;white-space:nowrap}
     .status-pill.proposed{color:#19222b;background:var(--green)}
     .status-pill.review{color:#19222b;background:var(--gold)}
-    .priority{margin-top:10px;border:1px solid rgba(247,245,240,.36);color:var(--paper);background:rgba(32,43,53,.72)}
-    .priority.high{border-color:rgba(201,165,143,.9);background:rgba(201,165,143,.28);color:#fff7f0}
-    .priority.medium{border-color:rgba(143,179,201,.86);background:rgba(143,179,201,.2)}
+    .priority{margin-top:10px;border:1px solid rgba(246,248,251,.36);color:var(--paper);background:rgba(21,27,35,.72)}
+    .priority.high{border-color:rgba(255,90,96,.95);background:rgba(255,90,96,.28);color:#fff}
+    .priority.medium{border-color:rgba(255,178,36,.9);background:rgba(255,178,36,.2)}
     .proposal ul{margin:7px 0 0;padding-left:18px;color:var(--muted);font-size:.9rem}
     .proposal .hash{margin-top:7px;color:var(--muted);font-size:.78rem;word-break:break-all}
     .actions{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .actions button{min-height:44px;border:2px solid transparent;border-radius:8px;padding:9px 14px;color:var(--deep);font-weight:900;font-size:.95rem;cursor:pointer;transition:transform .12s ease,filter .12s ease}
     .actions button:hover{filter:brightness(1.08);transform:translateY(-1px)}
     .actions button:focus-visible{outline:3px solid var(--paper);outline-offset:3px}
-    .actions button.ok{background:var(--green);border-color:#d8e9bd}
-    .actions button.no{background:var(--coral);border-color:#efd1be}
+    .actions button.ok{background:var(--ok);border-color:#bfe9c8;color:#0d1a11}
+    .actions button.no{background:var(--danger);border-color:#ffc9cb;color:#fff}
     .decided{margin-top:9px;font-size:.88rem;font-weight:800;color:var(--gold)}
     #humanlog{margin-top:18px;padding:12px;border:1px solid var(--line);border-radius:9px;font-size:.9rem;color:var(--muted)}
     #humanlog b{color:var(--paper);display:block;margin-bottom:5px;font-size:.85rem;letter-spacing:.08em}
     #humanlog p{margin:5px 0}
     footer{padding:10px 18px;border-top:1px solid var(--line);color:var(--muted);font-size:.82rem;display:flex;gap:16px;flex-wrap:wrap}
     footer code{color:var(--water);word-break:break-all}
-    #notice{display:none;padding:10px 18px;background:rgba(165,143,201,.2);border-bottom:1px solid rgba(165,143,201,.65);color:#f2ebfa;font-size:.92rem}
+    #notice{display:none;padding:10px 18px;background:rgba(90,176,234,.18);border-bottom:1px solid rgba(90,176,234,.62);color:#eaf4fc;font-size:.92rem}
     #empty{display:none;place-items:center;text-align:center;padding:40px;color:var(--paper)}
     #empty code{color:var(--water)}
-    .legend{position:absolute;z-index:1000;right:12px;bottom:12px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:rgba(32,43,53,.92);font-size:.85rem;color:var(--paper)}
+    .legend{position:absolute;z-index:1000;right:12px;bottom:12px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:rgba(21,27,35,.94);font-size:.85rem;color:var(--paper)}
     .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
     .popup-table{font-size:.88rem;border-collapse:collapse}
     .popup-table td{padding:2px 7px 2px 0;vertical-align:top}
@@ -66,7 +82,7 @@
     .leaflet-popup-tip{background:var(--deep)}
     .map-tooltip{padding:4px 7px;border:2px solid #101820;border-radius:6px;background:#fff;color:#101820;box-shadow:0 2px 9px rgba(0,0,0,.55);font-weight:900;font-size:.74rem;letter-spacing:.02em}
     .map-tooltip:before{border-top-color:#101820}
-    .map-tooltip.request{border-color:#ff3d71}.map-tooltip.resource{border-color:#00a8cc}.map-tooltip.shelter{border-color:#00a85a}
+    .map-tooltip.request{border-color:#ff5a60}.map-tooltip.resource{border-color:#5ab0ea}.map-tooltip.shelter{border-color:#3fc76a}
     .state-verified{color:var(--green);font-weight:700}
     .state-unverified{color:var(--gold);font-weight:700}
     .state-conflicting{color:var(--coral);font-weight:700}
@@ -81,6 +97,11 @@
   </style>
 </head>
 <body>
+<div class="demo-ribbon"><strong>DEMO</strong><span data-en="· synthetic data, not a live emergency service. Run the real app locally:" data-es="· datos sintéticos, no es un servicio real. Corré la app real localmente:">· synthetic data, not a live emergency service. Run the real app locally:</span><code>git clone … &amp;&amp; python3 -m lifeline serve</code></div>
+<script>/* The ribbon marks the statically hosted synthetic demo. When the page is
+   served by the real local server (python3 -m lifeline serve), hide it so the
+   working app is not mislabelled during a live/recorded walkthrough. */
+if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=document.querySelector(".demo-ribbon");if(_r)_r.remove()}</script>
 <header>
   <div class="brand">LIFELINE</div>
   <span class="tag" id="mode-label"></span>
@@ -107,10 +128,10 @@
     <p id="briefingnote" class="briefing-note"></p>
     <label id="token-row" style="display:block;margin:0 0 12px;font-size:.9rem;color:var(--muted)">
       <span data-en="Local coordinator token (kept in this tab only)" data-es="Token local de coordinación (sólo se conserva en esta pestaña)">Local coordinator token (kept in this tab only)</span><br>
-      <input id="operator-token" type="password" autocomplete="off" spellcheck="false" style="margin-top:4px;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:rgba(4,28,45,.7);color:var(--paper);font:inherit;font-size:.95rem">
+      <input id="operator-token" type="password" autocomplete="off" spellcheck="false" style="margin-top:4px;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:rgba(21,27,35,.7);color:var(--paper);font:inherit;font-size:.95rem">
     </label>
     <div id="proposals"></div>
-    <div id="findings" style="display:none;margin-top:18px;padding:11px;border:1px solid rgba(242,199,110,.55);border-radius:9px;font-size:.9rem;color:var(--muted)">
+    <div id="findings" style="display:none;margin-top:18px;padding:11px;border:1px solid rgba(255,178,36,.55);border-radius:9px;font-size:.9rem;color:var(--muted)">
       <b style="color:var(--gold);display:block;margin-bottom:5px;font-size:.85rem;letter-spacing:.08em" data-en="VALIDATION FINDINGS (SEALED WITH THE PLAN)" data-es="HALLAZGOS DE VALIDACIÓN (SELLADOS CON EL PLAN)">VALIDATION FINDINGS (SEALED WITH THE PLAN)</b>
       <div id="findingslist"></div>
     </div>
@@ -130,7 +151,7 @@
 <script src="demo-data.js"></script>
 <script>
 (() => {
-  const COLORS = { request: "#ff3d71", resource: "#00d9ff", shelter: "#00e676", zone: "#ffe066" };
+  const COLORS = { request: "#ff5a60", resource: "#5ab0ea", shelter: "#3fc76a", zone: "#ffd54a" };
   const root = document.documentElement;
   const roomQuery = new URLSearchParams(window.location.search);
   const isDemo = roomQuery.get("mode") !== "live";
@@ -298,9 +319,9 @@
   }
 
   function routeStyle(props) {
-    if (!props.reported_open) return { color: "#ff3d71", weight: 6, dashArray: "10 9", opacity: 1 };
-    if (!props.usable) return { color: "#ff9f1c", weight: 6, dashArray: "4 9", opacity: 1 };
-    return { color: "#00d9ff", weight: 7, opacity: 1 };
+    if (!props.reported_open) return { color: "#ff5a60", weight: 6, dashArray: "10 9", opacity: 1 };
+    if (!props.usable) return { color: "#ffb224", weight: 6, dashArray: "4 9", opacity: 1 };
+    return { color: "#3fc76a", weight: 7, opacity: 1 };
   }
 
   function decidedText(entry) {
@@ -439,7 +460,7 @@
     findings.forEach(f => {
       const p = document.createElement("p");
       p.style.margin = "5px 0";
-      p.innerHTML = `<b style="color:${f.severity === "warn" ? "#c9a58f" : "#8fb3c9"}">${esc(f.code)}</b> ${esc(typeWord(f.entity_type))} ${esc(f.entity_id)} — ${esc(detailText(f.detail))}`;
+      p.innerHTML = `<b style="color:${f.severity === "warn" ? "#ffb224" : "#5ab0ea"}">${esc(f.code)}</b> ${esc(typeWord(f.entity_type))} ${esc(f.entity_id)} — ${esc(detailText(f.detail))}`;
       list.appendChild(p);
     });
   }
@@ -452,7 +473,7 @@
     list.innerHTML = "";
     state.sim.variants.forEach(v => {
       const card = document.createElement("div");
-      card.style.cssText = "margin:9px 0;padding:9px;border-left:3px solid var(--water);background:rgba(89,201,222,.06);border-radius:0 7px 7px 0";
+      card.style.cssText = "margin:9px 0;padding:9px;border-left:3px solid var(--info);background:rgba(90,176,234,.08);border-radius:0 7px 7px 0";
       const changed = v.diff.filter(d => d.changed);
       const lines = changed.length
         ? changed.map(d => {
@@ -513,7 +534,7 @@
 
   function renderLegend() {
     if (!state.legend) return;
-    state.legend.innerHTML = `<i style="background:#ff3d71"></i>${w("request", "pedido")} &nbsp;<i style="background:#ff9f1c"></i>${w("needs review / not usable", "revisión / no usable")} &nbsp;<i style="background:#00d9ff"></i>${w("resource", "recurso")} &nbsp;<i style="background:#00e676"></i>${w("shelter", "refugio")}<br><span style="color:#00d9ff">&#9476;&#9476;</span> ${w("usable route", "ruta usable")} &nbsp;<span style="color:#ff3d71">&#9476;&#9476;</span> ${w("closed", "cerrada")} &nbsp;<span style="color:#ff9f1c">&#9476;&#9476;</span> ${w("unverified / conflicting / stale", "no verificada / contradictoria / vieja")}`;
+    state.legend.innerHTML = `<i style="background:#ff5a60"></i>${w("request", "pedido")} &nbsp;<i style="background:#ffb224"></i>${w("needs review / not usable", "revisión / no usable")} &nbsp;<i style="background:#5ab0ea"></i>${w("resource", "recurso")} &nbsp;<i style="background:#3fc76a"></i>${w("shelter", "refugio")}<br><span style="color:#3fc76a">&#9476;&#9476;</span> ${w("usable route", "ruta usable")} &nbsp;<span style="color:#ff5a60">&#9476;&#9476;</span> ${w("closed", "cerrada")} &nbsp;<span style="color:#ffb224">&#9476;&#9476;</span> ${w("unverified / conflicting / stale", "no verificada / contradictoria / vieja")}`;
   }
 
   function renderAll() {
@@ -631,7 +652,7 @@
       pointToLayer: (f, latlng) => {
         const type = f.properties.feature_type;
         const gated = type === "request" && f.properties.status !== "PROPOSED";
-        const color = gated ? "#ff9f1c" : COLORS[type];
+        const color = gated ? "#ffb224" : COLORS[type];
         const radius = type === "zone" ? 6 : type === "request" ? 15 : 13;
         return L.circleMarker(latlng, {
           radius,
