@@ -1,0 +1,571 @@
+{
+  "base": {
+    "proposals": [
+      {
+        "eta_minutes": 19,
+        "request_id": "family-north",
+        "resource_id": "boat-02",
+        "shelter_id": "shelter-a",
+        "status": "PROPOSED"
+      },
+      {
+        "eta_minutes": null,
+        "request_id": "family-south",
+        "resource_id": null,
+        "shelter_id": null,
+        "status": "NEEDS_HUMAN_REVIEW"
+      },
+      {
+        "eta_minutes": 21,
+        "request_id": "family-east",
+        "resource_id": "ambulance-01",
+        "shelter_id": "shelter-a",
+        "status": "PROPOSED"
+      },
+      {
+        "eta_minutes": null,
+        "request_id": "group-riverside",
+        "resource_id": null,
+        "shelter_id": null,
+        "status": "NEEDS_HUMAN_REVIEW"
+      }
+    ],
+    "validation_findings": [
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 115 minutes old; downgraded to 'medium'",
+        "entity_id": "family-east",
+        "entity_type": "request",
+        "severity": "warn"
+      },
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 108 minutes old; downgraded to 'medium'",
+        "entity_id": "family-north",
+        "entity_type": "request",
+        "severity": "warn"
+      },
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+        "entity_id": "ambulance-01",
+        "entity_type": "resource",
+        "severity": "warn"
+      },
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+        "entity_id": "boat-02",
+        "entity_type": "resource",
+        "severity": "warn"
+      },
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+        "entity_id": "ambulance-base->east-bank",
+        "entity_type": "route",
+        "severity": "warn"
+      },
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+        "entity_id": "boat-base->north-bank",
+        "entity_type": "route",
+        "severity": "warn"
+      },
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+        "entity_id": "east-bank->shelter-a",
+        "entity_type": "route",
+        "severity": "warn"
+      },
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+        "entity_id": "north-bank->shelter-a",
+        "entity_type": "route",
+        "severity": "warn"
+      },
+      {
+        "code": "STALE_REPORT",
+        "detail": "declared freshness 'high' but report is 110 minutes old; downgraded to 'medium'",
+        "entity_id": "shelter-a",
+        "entity_type": "shelter",
+        "severity": "warn"
+      }
+    ]
+  },
+  "limitations": [
+    "simulation over synthetic or explicitly authorized data only; results are not live facts",
+    "unmodelled: travel-time variability, weather, fuel, crew availability, secondary hazards",
+    "no winner is selected; a human compares the alternatives and decides"
+  ],
+  "reference_time": "2026-07-17T11:00:00Z",
+  "scenario_id": "flood-v1-synthetic",
+  "simulation_id": "flood-v1-whatifs",
+  "simulation_version": 1,
+  "variants": [
+    {
+      "assumptions": [
+        "route north-bank -> shelter-a is confirmed closed by an authorized source"
+      ],
+      "diff": [
+        {
+          "base": {
+            "eta_minutes": 21,
+            "resource_id": "ambulance-01",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          },
+          "changed": false,
+          "request_id": "family-east",
+          "variant": {
+            "eta_minutes": 21,
+            "resource_id": "ambulance-01",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": 19,
+            "resource_id": "boat-02",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          },
+          "changed": true,
+          "request_id": "family-north",
+          "variant": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          },
+          "changed": false,
+          "request_id": "family-south",
+          "variant": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          },
+          "changed": false,
+          "request_id": "group-riverside",
+          "variant": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          }
+        }
+      ],
+      "label": "North bridge confirmed closed",
+      "overrides": [
+        {
+          "destination": "shelter-a",
+          "kind": "route",
+          "origin": "north-bank",
+          "set": {
+            "open": false
+          }
+        }
+      ],
+      "validation_findings": [
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 115 minutes old; downgraded to 'medium'",
+          "entity_id": "family-east",
+          "entity_type": "request",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 108 minutes old; downgraded to 'medium'",
+          "entity_id": "family-north",
+          "entity_type": "request",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+          "entity_id": "ambulance-01",
+          "entity_type": "resource",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+          "entity_id": "boat-02",
+          "entity_type": "resource",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+          "entity_id": "ambulance-base->east-bank",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+          "entity_id": "boat-base->north-bank",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+          "entity_id": "east-bank->shelter-a",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+          "entity_id": "north-bank->shelter-a",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 110 minutes old; downgraded to 'medium'",
+          "entity_id": "shelter-a",
+          "entity_type": "shelter",
+          "severity": "warn"
+        }
+      ],
+      "variant_id": "north-route-closed"
+    },
+    {
+      "assumptions": [
+        "route boat-base -> south-bank reopens after inspection",
+        "route south-bank -> shelter-a is verified by a patrol",
+        "request family-south is confirmed by an authorized operator"
+      ],
+      "diff": [
+        {
+          "base": {
+            "eta_minutes": 21,
+            "resource_id": "ambulance-01",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          },
+          "changed": false,
+          "request_id": "family-east",
+          "variant": {
+            "eta_minutes": 21,
+            "resource_id": "ambulance-01",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": 19,
+            "resource_id": "boat-02",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          },
+          "changed": false,
+          "request_id": "family-north",
+          "variant": {
+            "eta_minutes": 19,
+            "resource_id": "boat-02",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          },
+          "changed": false,
+          "request_id": "family-south",
+          "variant": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          },
+          "changed": false,
+          "request_id": "group-riverside",
+          "variant": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          }
+        }
+      ],
+      "label": "South access restored and family-south verified",
+      "overrides": [
+        {
+          "destination": "south-bank",
+          "kind": "route",
+          "origin": "boat-base",
+          "set": {
+            "open": true
+          }
+        },
+        {
+          "destination": "shelter-a",
+          "kind": "route",
+          "origin": "south-bank",
+          "set": {
+            "freshness": "medium",
+            "verification_state": "verified"
+          }
+        },
+        {
+          "id": "family-south",
+          "kind": "request",
+          "set": {
+            "verification_state": "verified"
+          }
+        }
+      ],
+      "validation_findings": [
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 115 minutes old; downgraded to 'medium'",
+          "entity_id": "family-east",
+          "entity_type": "request",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 108 minutes old; downgraded to 'medium'",
+          "entity_id": "family-north",
+          "entity_type": "request",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+          "entity_id": "ambulance-01",
+          "entity_type": "resource",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+          "entity_id": "boat-02",
+          "entity_type": "resource",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+          "entity_id": "ambulance-base->east-bank",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+          "entity_id": "boat-base->north-bank",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+          "entity_id": "east-bank->shelter-a",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+          "entity_id": "north-bank->shelter-a",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 110 minutes old; downgraded to 'medium'",
+          "entity_id": "shelter-a",
+          "entity_type": "shelter",
+          "severity": "warn"
+        }
+      ],
+      "variant_id": "south-access-restored"
+    },
+    {
+      "assumptions": [
+        "shelter-a reports 5 open beds instead of 12"
+      ],
+      "diff": [
+        {
+          "base": {
+            "eta_minutes": 21,
+            "resource_id": "ambulance-01",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          },
+          "changed": true,
+          "request_id": "family-east",
+          "variant": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": 19,
+            "resource_id": "boat-02",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          },
+          "changed": false,
+          "request_id": "family-north",
+          "variant": {
+            "eta_minutes": 19,
+            "resource_id": "boat-02",
+            "shelter_id": "shelter-a",
+            "status": "PROPOSED"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          },
+          "changed": false,
+          "request_id": "family-south",
+          "variant": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          }
+        },
+        {
+          "base": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          },
+          "changed": false,
+          "request_id": "group-riverside",
+          "variant": {
+            "eta_minutes": null,
+            "resource_id": null,
+            "shelter_id": null,
+            "status": "NEEDS_HUMAN_REVIEW"
+          }
+        }
+      ],
+      "label": "Shelter A loses beds to flooding",
+      "overrides": [
+        {
+          "id": "shelter-a",
+          "kind": "shelter",
+          "set": {
+            "beds_open": 5
+          }
+        }
+      ],
+      "validation_findings": [
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 115 minutes old; downgraded to 'medium'",
+          "entity_id": "family-east",
+          "entity_type": "request",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 108 minutes old; downgraded to 'medium'",
+          "entity_id": "family-north",
+          "entity_type": "request",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+          "entity_id": "ambulance-01",
+          "entity_type": "resource",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+          "entity_id": "boat-02",
+          "entity_type": "resource",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+          "entity_id": "ambulance-base->east-bank",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+          "entity_id": "boat-base->north-bank",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+          "entity_id": "east-bank->shelter-a",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+          "entity_id": "north-bank->shelter-a",
+          "entity_type": "route",
+          "severity": "warn"
+        },
+        {
+          "code": "STALE_REPORT",
+          "detail": "declared freshness 'high' but report is 110 minutes old; downgraded to 'medium'",
+          "entity_id": "shelter-a",
+          "entity_type": "shelter",
+          "severity": "warn"
+        }
+      ],
+      "variant_id": "shelter-a-degraded"
+    }
+  ]
+}

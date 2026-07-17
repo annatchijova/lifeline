@@ -7,58 +7,85 @@
   <title>LIFELINE — Incident room</title>
   <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
   <style>
-    :root{--ocean:#592B3A;--deep:#2e1420;--water:#59c9de;--coral:#ff886d;--gold:#f2c76e;--green:#40ad7b;--blue:#3781d0;--paper:#f4fbfc;--muted:#d9bfc9;--line:rgba(244,251,252,.22)}
+    :root{--ocean:#34424e;--deep:#202b35;--water:#8fb3c9;--coral:#c9a58f;--gold:#a58fc9;--green:#b3c98f;--blue:#8fb3c9;--paper:#f7f5f0;--muted:#d9e0df;--line:rgba(247,245,240,.22)}
     *{box-sizing:border-box}
     body{margin:0;height:100vh;display:flex;flex-direction:column;color:var(--paper);background:var(--ocean);font:17px/1.5 Arial,Helvetica,ui-sans-serif,sans-serif}
     header{display:flex;align-items:center;gap:14px;padding:12px 18px;border-bottom:1px solid var(--line)}
     .brand{font-weight:900;letter-spacing:.13em;font-size:1rem}
     .brand:before{content:"\2726";color:var(--water);margin-right:9px}
-    .tag{padding:5px 10px;border:1px solid rgba(255,136,109,.6);border-radius:7px;color:#ffe3db;background:rgba(60,20,30,.35);font-size:.85rem}
+    .tag{padding:5px 10px;border:1px solid rgba(201,165,143,.75);border-radius:7px;color:#f4e7de;background:rgba(32,43,53,.55);font-size:.85rem}
     header a{margin-left:auto;color:var(--paper);font-size:.9rem}
     .lang{display:flex;padding:3px;border:1px solid var(--line);border-radius:99px}
     .lang button{border:0;border-radius:99px;padding:6px 12px;background:transparent;color:var(--paper);font-weight:800;cursor:pointer;font-size:.85rem}
     .lang button[aria-pressed=true]{color:var(--deep);background:var(--water)}
     main{flex:1;display:grid;grid-template-columns:54% 46%;min-height:0}
-    #map{min-height:0;background:#0b3a52}
-    aside{overflow-y:auto;padding:16px;border-left:1px solid var(--line);background:rgba(30,10,20,.55)}
+    #map{min-height:0;background:linear-gradient(128deg,transparent 0 35%,rgba(143,179,201,.45) 35% 39%,transparent 39% 67%,rgba(165,143,201,.18) 67%),repeating-linear-gradient(0deg,transparent 0 68px,rgba(247,245,240,.07) 69px 70px),repeating-linear-gradient(90deg,transparent 0 68px,rgba(247,245,240,.07) 69px 70px),#2b3a46}
+    aside{overflow-y:auto;padding:16px;border-left:1px solid var(--line);background:rgba(32,43,53,.88)}
     aside h2{margin:0 0 4px;font-size:1.25rem}
     aside .sub{margin:0 0 14px;color:var(--muted);font-size:.95rem}
-    .proposal{margin:10px 0;padding:12px;border-left:3px solid var(--water);border-radius:0 8px 8px 0;background:rgba(89,201,222,.08)}
-    .proposal.review{border-left-color:var(--gold);background:rgba(242,199,110,.09)}
-    .proposal b{display:block;font-size:.95rem;letter-spacing:.04em}
+    .overview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0 0 16px}
+    .metric{padding:10px;border:1px solid var(--line);border-radius:8px;background:rgba(32,43,53,.42)}
+    .metric b{display:block;font-size:1.35rem;line-height:1;color:var(--paper)}
+    .metric span{display:block;margin-top:5px;color:var(--muted);font-size:.76rem;font-weight:700;letter-spacing:.04em}
+    .metric.review{border-color:rgba(165,143,201,.75)} .metric.warn{border-color:rgba(201,165,143,.75)}
+    .briefing-note{margin:0 0 14px;padding:9px 11px;border-left:3px solid var(--water);background:rgba(143,179,201,.1);color:var(--muted);font-size:.84rem}
+    .proposal{margin:12px 0;padding:14px;border:1px solid rgba(143,179,201,.38);border-left:5px solid var(--water);border-radius:10px;background:rgba(143,179,201,.11)}
+    .proposal.proposed{border-color:rgba(179,201,143,.62);border-left-color:var(--green);background:rgba(179,201,143,.10)}
+    .proposal.review{border-color:rgba(165,143,201,.7);border-left-color:var(--gold);background:rgba(165,143,201,.15)}
+    .proposal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .proposal b{display:block;font-size:1rem;letter-spacing:.02em;line-height:1.25}
+    .status-pill,.priority{display:inline-flex;align-items:center;border-radius:99px;padding:4px 8px;font-size:.72rem;font-weight:900;letter-spacing:.06em;line-height:1.2;white-space:nowrap}
+    .status-pill.proposed{color:#19222b;background:var(--green)}
+    .status-pill.review{color:#19222b;background:var(--gold)}
+    .priority{margin-top:10px;border:1px solid rgba(247,245,240,.36);color:var(--paper);background:rgba(32,43,53,.72)}
+    .priority.high{border-color:rgba(201,165,143,.9);background:rgba(201,165,143,.28);color:#fff7f0}
+    .priority.medium{border-color:rgba(143,179,201,.86);background:rgba(143,179,201,.2)}
     .proposal ul{margin:7px 0 0;padding-left:18px;color:var(--muted);font-size:.9rem}
     .proposal .hash{margin-top:7px;color:var(--muted);font-size:.78rem;word-break:break-all}
-    .actions{margin-top:9px;display:flex;gap:8px}
-    .actions button{border:1px solid var(--line);border-radius:7px;padding:7px 14px;background:transparent;color:var(--paper);font-weight:700;font-size:.9rem;cursor:pointer}
-    .actions button.ok{border-color:var(--green)}
-    .actions button.no{border-color:var(--coral)}
+    .actions{margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .actions button{min-height:44px;border:2px solid transparent;border-radius:8px;padding:9px 14px;color:var(--deep);font-weight:900;font-size:.95rem;cursor:pointer;transition:transform .12s ease,filter .12s ease}
+    .actions button:hover{filter:brightness(1.08);transform:translateY(-1px)}
+    .actions button:focus-visible{outline:3px solid var(--paper);outline-offset:3px}
+    .actions button.ok{background:var(--green);border-color:#d8e9bd}
+    .actions button.no{background:var(--coral);border-color:#efd1be}
     .decided{margin-top:9px;font-size:.88rem;font-weight:800;color:var(--gold)}
     #humanlog{margin-top:18px;padding:12px;border:1px solid var(--line);border-radius:9px;font-size:.9rem;color:var(--muted)}
     #humanlog b{color:var(--paper);display:block;margin-bottom:5px;font-size:.85rem;letter-spacing:.08em}
     #humanlog p{margin:5px 0}
     footer{padding:10px 18px;border-top:1px solid var(--line);color:var(--muted);font-size:.82rem;display:flex;gap:16px;flex-wrap:wrap}
     footer code{color:var(--water);word-break:break-all}
-    #notice{display:none;padding:10px 18px;background:rgba(242,199,110,.2);border-bottom:1px solid rgba(242,199,110,.5);color:#fff3d6;font-size:.92rem}
+    #notice{display:none;padding:10px 18px;background:rgba(165,143,201,.2);border-bottom:1px solid rgba(165,143,201,.65);color:#f2ebfa;font-size:.92rem}
     #empty{display:none;place-items:center;text-align:center;padding:40px;color:var(--paper)}
     #empty code{color:var(--water)}
-    .legend{position:absolute;z-index:1000;right:12px;bottom:12px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:rgba(4,28,45,.88);font-size:.85rem;color:#e8f4f7}
+    .legend{position:absolute;z-index:1000;right:12px;bottom:12px;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:rgba(32,43,53,.92);font-size:.85rem;color:var(--paper)}
     .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
     .popup-table{font-size:.88rem;border-collapse:collapse}
     .popup-table td{padding:2px 7px 2px 0;vertical-align:top}
-    .popup-table td:first-child{color:#7d9aa6;white-space:nowrap}
+    .popup-table td:first-child{color:#bdd0d8;white-space:nowrap}
     .leaflet-popup-content-wrapper{background:var(--deep);color:var(--paper);border:1px solid var(--line)}
     .leaflet-popup-tip{background:var(--deep)}
+    .map-tooltip{padding:4px 7px;border:2px solid #101820;border-radius:6px;background:#fff;color:#101820;box-shadow:0 2px 9px rgba(0,0,0,.55);font-weight:900;font-size:.74rem;letter-spacing:.02em}
+    .map-tooltip:before{border-top-color:#101820}
+    .map-tooltip.request{border-color:#ff3d71}.map-tooltip.resource{border-color:#00a8cc}.map-tooltip.shelter{border-color:#00a85a}
     .state-verified{color:var(--green);font-weight:700}
     .state-unverified{color:var(--gold);font-weight:700}
     .state-conflicting{color:var(--coral);font-weight:700}
     @media(max-width:900px){main{grid-template-columns:1fr}#map{min-height:45vh}aside{border-left:0;border-top:1px solid var(--line);max-height:50vh}}
+    @media(max-width:440px){.overview{grid-template-columns:1fr 1fr}.metric:last-child{grid-column:1 / -1}.proposal-head{display:block}.status-pill{margin-top:8px}.actions{grid-template-columns:1fr}}
+    @media(max-width:600px){
+      header{flex-wrap:wrap;gap:8px;padding:10px 12px}
+      header a{order:1;margin-left:auto}
+      .lang{order:2}
+      .tag{order:3;width:100%;padding:5px 8px}
+    }
   </style>
 </head>
 <body>
 <header>
   <div class="brand">LIFELINE</div>
-  <span class="tag" data-en="Illustrative synthetic scenario — not a live emergency service" data-es="Escenario sintético ilustrativo — no es un servicio de emergencias en vivo">Illustrative synthetic scenario — not a live emergency service</span>
+  <span class="tag" id="mode-label"></span>
   <a href="index.html">&larr; <span data-en="about" data-es="acerca de">about</span></a>
+  <a id="mode-link" href="room.html?mode=live"></a>
   <div class="lang"><button data-language="en" aria-pressed="true">EN</button><button data-language="es" aria-pressed="false">ES</button></div>
 </header>
 <div id="notice"></div>
@@ -74,7 +101,9 @@
   </div>
   <aside>
     <h2 data-en="Proposed plan / human approval" data-es="Plan propuesto / aprobación humana">Proposed plan / human approval</h2>
-    <p class="sub" data-en="Produced by the deterministic kernel. Nothing is dispatched from this page; decisions are appended to a hash-chained local log when the server is running." data-es="Producido por el kernel determinístico. Esta página no despacha nada; las decisiones se agregan a un registro local encadenado por hash cuando el servidor está corriendo.">Produced by the deterministic kernel. Nothing is dispatched from this page; decisions are appended to a hash-chained local log when the server is running.</p>
+    <p class="sub" id="room-description"></p>
+    <div id="overview" class="overview" aria-live="polite"></div>
+    <p id="briefingnote" class="briefing-note"></p>
     <label style="display:block;margin:0 0 12px;font-size:.9rem;color:var(--muted)">
       <span data-en="Approver ID (declared, not yet verified)" data-es="ID de aprobador/a (declarado, aún no verificado)">Approver ID (declared, not yet verified)</span><br>
       <input id="approver" maxlength="80" style="margin-top:4px;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:rgba(4,28,45,.7);color:var(--paper);font:inherit;font-size:.95rem">
@@ -87,7 +116,7 @@
     <div id="simulation" style="display:none;margin-top:18px;padding:11px;border:1px solid var(--line);border-radius:9px;font-size:.9rem;color:var(--muted)">
       <b style="color:var(--water);display:block;margin-bottom:5px;font-size:.85rem;letter-spacing:.08em" data-en="SIMULATED ALTERNATIVES — DECLARED ASSUMPTIONS, NOT LIVE FACTS" data-es="ALTERNATIVAS SIMULADAS — SUPUESTOS DECLARADOS, NO HECHOS EN VIVO">SIMULATED ALTERNATIVES — DECLARED ASSUMPTIONS, NOT LIVE FACTS</b>
       <div id="simlist"></div>
-      <p id="simlimits" style="margin:8px 0 0;font-size:.8rem;color:#b391a0"></p>
+      <p id="simlimits" style="margin:8px 0 0;font-size:.8rem;color:var(--muted)"></p>
     </div>
     <div id="humanlog"><b data-en="PENDING HUMAN ACTION LOG (LOCAL ONLY)" data-es="REGISTRO LOCAL DE ACCIONES HUMANAS PENDIENTES">PENDING HUMAN ACTION LOG (LOCAL ONLY)</b><div id="loglist"></div></div>
   </aside>
@@ -97,16 +126,21 @@
   <span id="sealinfo"></span>
 </footer>
 <script src="vendor/leaflet/leaflet.js"></script>
+<script src="demo-data.js"></script>
 <script>
 (() => {
-  const COLORS = { request: "#ff886d", resource: "#3781d0", shelter: "#40ad7b", zone: "#9ec3cb" };
+  const COLORS = { request: "#ff3d71", resource: "#00d9ff", shelter: "#00e676", zone: "#ffe066" };
   const root = document.documentElement;
+  const roomQuery = new URLSearchParams(window.location.search);
+  const isDemo = roomQuery.get("mode") !== "live";
+  const fellBackFromLive = roomQuery.get("missing") === "live";
+  const artifactRoot = isDemo ? "./demo" : "../out";
   const esc = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const w = (en, es) => (root.dataset.language === "es" ? es : en);
 
   const state = {
-    room: null, plan: null, seal: null, sim: null,
-    decisions: {}, log: [], apiMode: false, planSha: null,
+    room: null, plan: null, seal: null, sim: null, isDemo,
+    decisions: {}, log: [], apiMode: false, planSha: null, planIntegrity: "unknown",
     chain: null, popupLayers: [], legend: null,
   };
 
@@ -114,19 +148,41 @@
     root.lang = language; root.dataset.language = language;
     document.querySelectorAll("[data-en][data-es]").forEach(el => { el.innerHTML = el.dataset[language]; });
     document.querySelectorAll("[data-language]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.language === language)));
+    renderMode();
     if (state.plan) renderAll();
   }
   document.querySelectorAll("[data-language]").forEach(b => b.addEventListener("click", () => setLanguage(b.dataset.language)));
+
+  function renderMode() {
+    const label = document.getElementById("mode-label");
+    const link = document.getElementById("mode-link");
+    const description = document.getElementById("room-description");
+    if (isDemo) {
+      label.textContent = w("Synthetic demo — actions are local and never dispatch", "Demo sintética — las acciones son locales y nunca despachan");
+      link.href = "room.html?mode=live";
+      link.textContent = w("Open my exported room →", "Abrir mi sala exportada →");
+      description.textContent = w(
+        "This sealed synthetic scenario exercises the real deterministic kernel. Approve/reject actions update this browser session only; they never dispatch or write an approval record.",
+        "Este escenario sintético sellado ejecuta el kernel determinístico real. Las acciones de aprobar/rechazar actualizan sólo esta sesión del navegador; nunca despachan ni escriben un registro de aprobación.");
+    } else {
+      label.textContent = w("Your local sealed export — no live emergency service", "Tu exportación sellada local — no es un servicio de emergencias en vivo");
+      link.href = "room.html?mode=demo";
+      link.textContent = w("View the demo →", "Ver la demo →");
+      description.textContent = w(
+        "Produced by the deterministic kernel. Nothing is dispatched from this page; decisions are appended to a hash-chained local log only when the local approvals server is running.",
+        "Producido por el kernel determinístico. Esta página no despacha nada; las decisiones se agregan a un registro local encadenado por hash sólo cuando el servidor local de aprobaciones está corriendo.");
+    }
+  }
 
   // Sealed kernel strings stay English on disk; these are display-only translations.
   const REASONS_ES = {
     "human approval required": "requiere aprobación humana",
     "no eligible available resource": "sin recurso disponible elegible",
-    "no reachable shelter capacity": "sin capacidad de refugio alcanzable",
+    "no reachable destination shelter capacity": "sin capacidad de refugio alcanzable en el destino declarado",
     "unverified report": "reporte no verificado",
     "conflicting reports": "reportes contradictorios",
   };
-  const KEYS_ES = { urgency: "urgencia", people: "personas", resource: "recurso", shelter: "refugio", eta_minutes: "eta_minutos" };
+  const KEYS_ES = { urgency: "urgencia", people: "personas", resource: "recurso", shelter: "refugio", destination: "destino", eta_minutes: "eta_minutos" };
   function reasonText(reason) {
     if (root.dataset.language !== "es") return reason;
     if (REASONS_ES[reason]) return REASONS_ES[reason];
@@ -144,6 +200,37 @@
     ? ({ high: "alta", medium: "media", low: "baja" }[f] || f) : f;
   const typeWord = type => root.dataset.language === "es"
     ? ({ request: "pedido", resource: "recurso", shelter: "refugio", route: "ruta", scenario: "escenario" }[type] || type) : type;
+
+  function canonicalTag(value) {
+    if (value === null) return ["null"];
+    if (typeof value === "boolean") return ["bool", value];
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value)) throw new Error("sealed payload contains a non-integer number");
+      return ["int", String(value)];
+    }
+    if (typeof value === "string") return ["str", value];
+    if (Array.isArray(value)) return ["list", value.map(canonicalTag)];
+    if (typeof value === "object") {
+      return ["dict", Object.keys(value).sort().map(key => [key, canonicalTag(value[key])])];
+    }
+    throw new Error("unsupported sealed value");
+  }
+
+  function asciiJson(value) {
+    return JSON.stringify(value).replace(/[\u0080-\uffff]/g, char =>
+      `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  }
+
+  async function verifyPlanSeal(plan, seal) {
+    if (!seal || seal.canonicalize_version !== 1 || !window.crypto || !window.crypto.subtle) return "unavailable";
+    try {
+      const tagged = { canonicalize_version: 1, value: canonicalTag(plan) };
+      const bytes = new TextEncoder().encode(asciiJson(tagged));
+      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+      const actual = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+      return actual === seal.sha256 ? "pass" : "fail";
+    } catch { return "fail"; }
+  }
 
   const DETAIL_PATTERNS_ES = [
     [/^declared freshness '(\w+)' but report is (\d+) minutes old; downgraded to '(\w+)'$/,
@@ -208,9 +295,9 @@
   }
 
   function routeStyle(props) {
-    if (!props.reported_open) return { color: "#ff886d", weight: 2, dashArray: "6 7", opacity: 0.9 };
-    if (!props.usable) return { color: "#f2c76e", weight: 2, dashArray: "3 7", opacity: 0.9 };
-    return { color: "#59c9de", weight: 3, dashArray: "8 6", opacity: 0.95 };
+    if (!props.reported_open) return { color: "#ff3d71", weight: 6, dashArray: "10 9", opacity: 1 };
+    if (!props.usable) return { color: "#ff9f1c", weight: 6, dashArray: "4 9", opacity: 1 };
+    return { color: "#00d9ff", weight: 7, opacity: 1 };
   }
 
   function decidedText(entry) {
@@ -253,20 +340,59 @@
     }
   }
 
+  function renderOverview() {
+    const briefing = state.plan.briefing;
+    const fallback = state.plan.proposals.reduce((counts, proposal) => {
+      counts.total += 1;
+      if (proposal.status === "PROPOSED") counts.proposed += 1;
+      else counts.needs_human_review += 1;
+      return counts;
+    }, { proposed: 0, needs_human_review: 0, total: 0 });
+    const counts = briefing && briefing.proposal_counts ? briefing.proposal_counts : fallback;
+    const validation = briefing && briefing.validation
+      ? briefing.validation
+      : { warn: (state.plan.validation_findings || []).filter(f => f.severity === "warn").length };
+    document.getElementById("overview").innerHTML = `
+      <div class="metric"><b>${counts.proposed}</b><span>${w("PROPOSALS AWAITING DECISION", "PROPUESTAS A LA ESPERA DE DECISIÓN")}</span></div>
+      <div class="metric review"><b>${counts.needs_human_review}</b><span>${w("ITEMS NEEDING REVIEW", "ÍTEMS QUE REQUIEREN REVISIÓN")}</span></div>
+      <div class="metric warn"><b>${validation.warn || 0}</b><span>${w("VALIDATION WARNINGS", "ADVERTENCIAS DE VALIDACIÓN")}</span></div>`;
+    document.getElementById("briefingnote").textContent = w(
+      "This overview is a complete read model of the sealed plan. It does not rank people or authorize a dispatch.",
+      "Este resumen es una lectura completa del plan sellado. No clasifica personas ni autoriza un despacho.");
+  }
+
   function renderProposals() {
     const container = document.getElementById("proposals");
     container.innerHTML = "";
     state.plan.proposals.forEach(p => {
       const card = document.createElement("article");
       const review = p.status !== "PROPOSED";
-      card.className = "proposal" + (review ? " review" : "");
+      card.className = "proposal " + (review ? "review" : "proposed");
       const title = review
         ? `${esc(p.request_id)} · ${statusText(p.status)}`
         : `${esc(p.resource_id)} &rarr; ${esc(p.request_id)} &rarr; ${esc(p.shelter_id)} · ${p.eta_minutes} min`;
-      card.innerHTML = `<b>${title}</b>
-        <ul>${p.reasons.map(r => `<li>${esc(reasonText(r))}</li>`).join("")}</ul>
-        <div class="hash">${w("audit", "auditoría")} ${esc(p.audit_hash)}</div>`;
-      if (!review) {
+      const urgencyReason = p.reasons.find(reason => reason.startsWith("urgency="));
+      const urgency = urgencyReason ? Number(urgencyReason.slice("urgency=".length)) : null;
+      const priorityClass = urgency >= 5 ? "high" : "medium";
+      const remainingReasons = p.reasons.filter(reason => reason !== urgencyReason);
+      const status = review
+        ? w("REVIEW REQUIRED", "REVISIÓN REQUERIDA")
+        : w("AWAITING DECISION", "ESPERA DECISIÓN");
+      const priority = urgency === null
+        ? ""
+        : `<span class="priority ${priorityClass}">${w("DECLARED URGENCY", "URGENCIA DECLARADA")} ${urgency}/5</span>`;
+      card.innerHTML = `<div class="proposal-head"><b>${title}</b><span class="status-pill ${review ? "review" : "proposed"}">${status}</span></div>
+        ${priority}
+        <ul>${remainingReasons.map(r => `<li>${esc(reasonText(r))}</li>`).join("")}</ul>`;
+      if (!review && state.planIntegrity !== "pass") {
+        const blocked = document.createElement("div");
+        blocked.className = "decided";
+        blocked.style.color = "var(--coral)";
+        blocked.textContent = state.planIntegrity === "unavailable"
+          ? w("Plan seal could not be verified in this browser; no decision action is available.", "El sello del plan no pudo verificarse en este navegador; no hay acción de decisión disponible.")
+          : w("Plan seal verification failed; no decision action is available.", "Falló la verificación del sello del plan; no hay acción de decisión disponible.");
+        card.appendChild(blocked);
+      } else if (!review) {
         const existing = state.decisions[p.request_id];
         if (existing && (!existing.recorded || existing.proposal_audit_hash === p.audit_hash)) {
           const decided = document.createElement("div");
@@ -288,6 +414,10 @@
           card.appendChild(errorBox);
         }
       }
+      const hash = document.createElement("div");
+      hash.className = "hash";
+      hash.textContent = `${w("audit", "auditoría")} ${p.audit_hash}`;
+      card.appendChild(hash);
       container.appendChild(card);
     });
   }
@@ -302,7 +432,7 @@
     findings.forEach(f => {
       const p = document.createElement("p");
       p.style.margin = "5px 0";
-      p.innerHTML = `<b style="color:${f.severity === "warn" ? "#ff886d" : "#59c9de"}">${esc(f.code)}</b> ${esc(typeWord(f.entity_type))} ${esc(f.entity_id)} — ${esc(detailText(f.detail))}`;
+      p.innerHTML = `<b style="color:${f.severity === "warn" ? "#c9a58f" : "#8fb3c9"}">${esc(f.code)}</b> ${esc(typeWord(f.entity_type))} ${esc(f.entity_id)} — ${esc(detailText(f.detail))}`;
       list.appendChild(p);
     });
   }
@@ -325,7 +455,7 @@
               ? `${statusText(d.variant.status)} (${esc(d.variant.resource_id)}, ${d.variant.eta_minutes} min)` : statusText(d.variant.status);
             return `<p style="margin:3px 0">${esc(d.request_id)}: ${before} &rarr; <b>${after}</b></p>`;
           }).join("")
-        : `<p style="margin:3px 0;color:#b391a0">${w("no plan change under these assumptions", "sin cambios en el plan bajo estos supuestos")}</p>`;
+        : `<p style="margin:3px 0;color:var(--muted)">${w("no plan change under these assumptions", "sin cambios en el plan bajo estos supuestos")}</p>`;
       card.innerHTML = `<b style="font-size:.9rem">${esc(v.label)}</b>
         <ul style="margin:5px 0;padding-left:16px">${v.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
         ${lines}`;
@@ -354,24 +484,33 @@
 
   function renderSealinfo() {
     if (!state.seal) return;
+    let integrityNote = "";
+    if (state.planIntegrity === "pass") {
+      integrityNote = ` · <b style="color:var(--green)">${w("plan seal verified in browser", "sello del plan verificado en el navegador")}</b>`;
+    } else if (state.planIntegrity === "unavailable") {
+      integrityNote = ` · <b style="color:var(--gold)">${w("browser seal verification unavailable", "verificación de sello no disponible en el navegador")}</b>`;
+    } else if (state.planIntegrity === "fail") {
+      integrityNote = ` · <b style="color:var(--coral)">${w("PLAN SEAL FAILED", "FALLÓ EL SELLO DEL PLAN")}</b>`;
+    }
     let chainNote = "";
     if (state.chain && state.chain.ok) {
       chainNote = ` · ${w("approvals chain OK", "cadena de aprobaciones OK")} (${state.chain.count} ${w("entries", "entradas")})`;
     } else if (state.chain && !state.chain.ok) {
-      chainNote = ` · <b style="color:#ff886d">${w("APPROVALS CHAIN FAILED", "FALLÓ LA CADENA DE APROBACIONES")}: ${esc(state.chain.error)}</b>`;
+      chainNote = ` · <b style="color:var(--coral)">${w("APPROVALS CHAIN FAILED", "FALLÓ LA CADENA DE APROBACIONES")}: ${esc(state.chain.error)}</b>`;
     } else {
       chainNote = ` · ${w("no approvals server: decisions stay local and unrecorded", "sin servidor de aprobaciones: las decisiones quedan locales y sin registrar")}`;
     }
     document.getElementById("sealinfo").innerHTML =
-      `${w("plan seal", "sello del plan")} sha256 <code>${esc(state.seal.sha256)}</code> · ${w("scenario", "escenario")} <code>${esc(state.seal.scenario_sha256.slice(0, 16))}…</code>${chainNote}`;
+      `${w("plan seal", "sello del plan")} sha256 <code>${esc(state.seal.sha256)}</code> · ${w("scenario", "escenario")} <code>${esc(state.seal.scenario_sha256.slice(0, 16))}…</code>${integrityNote}${chainNote}`;
   }
 
   function renderLegend() {
     if (!state.legend) return;
-    state.legend.innerHTML = `<i style="background:#ff886d"></i>${w("request", "pedido")} &nbsp;<i style="background:#f2c76e"></i>${w("needs review / not usable", "revisión / no usable")} &nbsp;<i style="background:#3781d0"></i>${w("resource", "recurso")} &nbsp;<i style="background:#40ad7b"></i>${w("shelter", "refugio")}<br><span style="color:#59c9de">&#9476;&#9476;</span> ${w("usable route", "ruta usable")} &nbsp;<span style="color:#ff886d">&#9476;&#9476;</span> ${w("closed", "cerrada")} &nbsp;<span style="color:#f2c76e">&#9476;&#9476;</span> ${w("unverified / conflicting / stale", "no verificada / contradictoria / vieja")}`;
+    state.legend.innerHTML = `<i style="background:#ff3d71"></i>${w("request", "pedido")} &nbsp;<i style="background:#ff9f1c"></i>${w("needs review / not usable", "revisión / no usable")} &nbsp;<i style="background:#00d9ff"></i>${w("resource", "recurso")} &nbsp;<i style="background:#00e676"></i>${w("shelter", "refugio")}<br><span style="color:#00d9ff">&#9476;&#9476;</span> ${w("usable route", "ruta usable")} &nbsp;<span style="color:#ff3d71">&#9476;&#9476;</span> ${w("closed", "cerrada")} &nbsp;<span style="color:#ff9f1c">&#9476;&#9476;</span> ${w("unverified / conflicting / stale", "no verificada / contradictoria / vieja")}`;
   }
 
   function renderAll() {
+    renderOverview();
     renderProposals();
     renderFindings();
     renderSimulation();
@@ -384,32 +523,70 @@
   async function boot() {
     try {
       [state.room, state.plan, state.seal] = await Promise.all([
-        fetch("../out/room.geojson").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
-        fetch("../out/plan.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
-        fetch("../out/plan.seal.json").then(r => r.ok ? r.json() : null),
+        fetch(`${artifactRoot}/room.geojson`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+        fetch(`${artifactRoot}/plan.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+        fetch(`${artifactRoot}/plan.seal.json`).then(r => r.ok ? r.json() : null),
       ]);
     } catch {
-      document.getElementById("empty").style.display = "grid";
-      document.getElementById("empty").style.height = "100%";
-      return;
+      const bundled = window.LIFELINE_BUNDLED_DEMO;
+      if (isDemo && bundled) {
+        state.room = bundled.room;
+        state.plan = bundled.plan;
+        state.seal = bundled.seal;
+      } else if (!isDemo) {
+        window.location.replace("room.html?mode=demo&missing=live");
+        return;
+      } else {
+        document.getElementById("empty").style.display = "grid";
+        document.getElementById("empty").style.height = "100%";
+        return;
+      }
+    }
+
+    const notice = document.getElementById("notice");
+    if (fellBackFromLive) {
+      notice.style.display = "block";
+      notice.textContent = w(
+        "No local export was found, so you are viewing the bundled synthetic demo. Generate an export, then open “my exported room” to inspect it.",
+        "No se encontró una exportación local, así que estás viendo la demo sintética incluida. Generá una exportación y después abrí “mi sala exportada” para inspeccionarla.");
+    }
+    state.planIntegrity = await verifyPlanSeal(state.plan, state.seal);
+    if (state.planIntegrity === "fail") {
+      notice.style.display = "block";
+      notice.textContent = w(
+        "Plan seal verification failed. Data remain visible for inspection, but no approval action is available.",
+        "Falló la verificación del sello del plan. Los datos siguen visibles para inspección, pero no hay acción de aprobación disponible.");
+    } else if (state.planIntegrity === "unavailable") {
+      notice.style.display = "block";
+      notice.textContent = w(
+        "This browser cannot verify the plan seal. Inspect offline with 'lifeline verify'; approval actions are disabled here.",
+        "Este navegador no puede verificar el sello del plan. Inspeccioná sin conexión con 'lifeline verify'; aquí las acciones de aprobación están deshabilitadas.");
     }
 
     const map = L.map("map", { zoomControl: true });
-    const notice = document.getElementById("notice");
     const tiles = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
     });
     tiles.once("tileerror", () => {
       notice.style.display = "block";
       notice.textContent = w(
-        "Basemap unavailable (offline). Kernel data layers remain authoritative.",
-        "Mapa base no disponible (sin red). Las capas de datos del kernel siguen siendo autoritativas.");
+        "Basemap unavailable (offline). The local illustrative map remains visible; kernel data layers remain authoritative.",
+        "Mapa base no disponible (sin red). El mapa ilustrativo local sigue visible; las capas de datos del kernel siguen siendo autoritativas.");
     });
     tiles.addTo(map);
 
     const track = (feature, layer) => {
-      layer.bindPopup(popupFor(feature.properties));
-      state.popupLayers.push({ layer, props: feature.properties });
+      const props = feature.properties;
+      layer.bindPopup(popupFor(props));
+      if (props.feature_type === "request" || props.feature_type === "resource" || props.feature_type === "shelter") {
+        const label = props.feature_type === "request"
+          ? `${props.request_id} · P${props.urgency}`
+          : props.feature_type === "resource" ? props.resource_id : props.shelter_id;
+        layer.bindTooltip(esc(label), {
+          permanent: true, direction: "top", offset: [0, -12], className: `map-tooltip ${props.feature_type}`,
+        });
+      }
+      state.popupLayers.push({ layer, props });
     };
     const routes = L.geoJSON(state.room, {
       filter: f => f.properties.feature_type === "route",
@@ -421,11 +598,14 @@
       pointToLayer: (f, latlng) => {
         const type = f.properties.feature_type;
         const gated = type === "request" && f.properties.status !== "PROPOSED";
+        const color = gated ? "#ff9f1c" : COLORS[type];
+        const radius = type === "zone" ? 6 : type === "request" ? 15 : 13;
         return L.circleMarker(latlng, {
-          radius: type === "zone" ? 4 : 9,
-          color: gated ? "#f2c76e" : COLORS[type],
-          fillColor: gated ? "#f2c76e" : COLORS[type],
-          fillOpacity: type === "zone" ? 0.4 : 0.85, weight: 2,
+          radius,
+          color: "#101820",
+          fillColor: color,
+          fillOpacity: type === "zone" ? 0.95 : 1,
+          weight: type === "zone" ? 2 : 4,
         });
       },
       onEachFeature: track,
@@ -437,24 +617,28 @@
     document.getElementById("map").appendChild(state.legend);
 
     state.planSha = state.seal ? state.seal.sha256 : null;
-    try {
-      const response = await fetch("/api/approvals");
-      if (response.ok) {
-        const listing = await response.json();
-        state.apiMode = true;
-        state.chain = { ok: listing.chain_ok, count: listing.entries.length, error: listing.chain_error };
-        listing.entries.filter(e => e.plan_sha256 === state.planSha).forEach(e => {
-          const entry = { ...e, recorded: true };
-          state.decisions[e.request_id] = entry;
-          state.log.push(entry);
-        });
-      }
-    } catch { /* static serving: local-only mode */ }
+    if (!isDemo) {
+      try {
+        const response = await fetch("/api/approvals");
+        if (response.ok && state.planIntegrity === "pass") {
+          const listing = await response.json();
+          state.apiMode = true;
+          state.chain = { ok: listing.chain_ok, count: listing.entries.length, error: listing.chain_error };
+          listing.entries.filter(e => e.plan_sha256 === state.planSha).forEach(e => {
+            const entry = { ...e, recorded: true };
+            state.decisions[e.request_id] = entry;
+            state.log.push(entry);
+          });
+        }
+      } catch { /* static serving: local-only mode */ }
+    }
 
     try {
-      const response = await fetch("../out/simulation.json");
+      const response = await fetch(`${artifactRoot}/simulation.json`);
       if (response.ok) state.sim = await response.json();
-    } catch { /* no simulation exported */ }
+    } catch {
+      state.sim = window.LIFELINE_BUNDLED_DEMO && isDemo ? window.LIFELINE_BUNDLED_DEMO.simulation : null;
+    }
 
     renderAll();
   }
