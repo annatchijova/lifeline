@@ -9,7 +9,7 @@ from pathlib import Path
 
 from lifeline.approvals import ApprovalChainError, read_entries, verify_chain
 from lifeline.export import export_plan, seal_digest
-from lifeline.scenario import ScenarioError, load_scenario, plan_scenario
+from lifeline.scenario import ScenarioError
 from lifeline.trace import record_trace
 
 
@@ -20,6 +20,11 @@ def main(argv: list[str] | None = None) -> int:
     plan_parser.add_argument("scenario", help="path to a schema-v1 scenario JSON file")
     plan_parser.add_argument("--out", default="out", help="output directory (default: out)")
     plan_parser.add_argument("--no-trace", action="store_true", help="skip the optional CRONOS planning trace")
+    plan_parser.add_argument(
+        "--reference-time",
+        help="ISO 8601 time (with timezone) used to corroborate declared freshness; "
+             "without it staleness checks are skipped and reported as unchecked",
+    )
 
     serve_parser = subparsers.add_parser("serve", help="serve the incident room and approvals API on loopback")
     serve_parser.add_argument("--out", default="out", help="directory holding the exported plan (default: out)")
@@ -39,15 +44,19 @@ def main(argv: list[str] | None = None) -> int:
         return _verify(Path(args.out))
 
     try:
-        seal = export_plan(args.scenario, args.out)
+        result = export_plan(args.scenario, args.out, args.reference_time)
     except ScenarioError as error:
         print(f"scenario rejected: {error}", file=sys.stderr)
         return 2
-    print(f"plan sealed sha256={seal['sha256']}")
+    print(f"plan sealed sha256={result.seal['sha256']}")
     print(f"wrote plan.json, plan.seal.json, room.geojson to {args.out}/")
+    warns = sum(1 for finding in result.findings if finding.severity == "warn")
+    if result.findings:
+        print(f"validation findings: {len(result.findings)} ({warns} warn)")
+        for finding in result.findings:
+            print(f"  [{finding.severity}] {finding.code} {finding.entity_type}:{finding.entity_id} — {finding.detail}")
     if not args.no_trace:
-        scenario = load_scenario(args.scenario)
-        if record_trace(args.out, scenario, plan_scenario(scenario), seal):
+        if record_trace(args.out, result.scenario, result.proposals, result.seal):
             print(f"planning trace recorded in {args.out}/trace.sqlite")
     return 0
 

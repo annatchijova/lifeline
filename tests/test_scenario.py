@@ -94,6 +94,15 @@ def test_non_verified_route_is_unusable_even_if_reported_open():
     assert "no reachable shelter capacity" in by_id["family-south"].reasons
 
 
+def test_stale_route_is_unusable_even_if_open_and_verified():
+    raw = _raw()
+    # north-bank -> shelter-a becomes stale; family-north loses its only outbound leg.
+    raw["routes"][1]["freshness"] = "low"
+    plan = {p.request_id: p for p in plan_scenario(parse_scenario(raw))}
+    assert plan["family-north"].status == "NEEDS_HUMAN_REVIEW"
+    assert "no reachable shelter capacity" in plan["family-north"].reasons
+
+
 def test_plan_is_ordered_by_urgency_across_gated_and_planned():
     plan = plan_scenario(load_scenario(SCENARIO_PATH))
     assert [proposal.request_id for proposal in plan] == [

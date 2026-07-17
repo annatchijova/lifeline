@@ -235,14 +235,24 @@ def load_scenario(path: str | Path) -> Scenario:
     return parse_scenario(raw)
 
 
+def route_usable(reported: ReportedRoute) -> bool:
+    """Planning may never rely on closed, stale, or conflicting routes."""
+    return (
+        reported.route.open
+        and reported.provenance.verification_state == "verified"
+        and reported.provenance.freshness != "low"
+    )
+
+
 def plan_scenario(scenario: Scenario) -> list[DispatchProposal]:
     """Gate unverified evidence, then run the deterministic planner.
 
     Only verified requests may influence a proposal. Unverified or
     conflicting requests surface as NEEDS_HUMAN_REVIEW instead of being
-    silently planned or silently dropped. Routes whose report is not
-    verified are treated as unusable for planning, exactly like closed
-    routes; the display layer still shows their reported state.
+    silently planned or silently dropped. Routes that are closed, not
+    verified, or stale (freshness 'low', declared or corroborated) are
+    unusable for planning; the display layer still shows their reported
+    state.
     """
     gated: list[DispatchProposal] = []
     verified_requests: list[IncidentRequest] = []
@@ -257,8 +267,7 @@ def plan_scenario(scenario: Scenario) -> list[DispatchProposal]:
         gated.append(DispatchProposal(reported.request.request_id, "NEEDS_HUMAN_REVIEW", None, None, None, reasons, audit_hash))
 
     usable_routes = [
-        Route(item.route.origin, item.route.destination, item.route.eta_minutes,
-              item.route.open and item.provenance.verification_state == "verified")
+        Route(item.route.origin, item.route.destination, item.route.eta_minutes, route_usable(item))
         for item in scenario.routes
     ]
     planned = plan_response(

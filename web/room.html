@@ -80,6 +80,10 @@
       <input id="approver" maxlength="80" style="margin-top:4px;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:rgba(4,28,45,.7);color:var(--paper);font:inherit;font-size:.8rem">
     </label>
     <div id="proposals"></div>
+    <div id="findings" style="display:none;margin-top:18px;padding:11px;border:1px solid rgba(242,199,110,.4);border-radius:9px;font-size:.75rem;color:var(--muted)">
+      <b style="color:var(--gold);display:block;margin-bottom:5px;font-size:.72rem;letter-spacing:.08em" data-en="VALIDATION FINDINGS (SEALED WITH THE PLAN)" data-es="HALLAZGOS DE VALIDACIÓN (SELLADOS CON EL PLAN)">VALIDATION FINDINGS (SEALED WITH THE PLAN)</b>
+      <div id="findingslist"></div>
+    </div>
     <div id="humanlog"><b data-en="PENDING HUMAN ACTION LOG (LOCAL ONLY)" data-es="REGISTRO LOCAL DE ACCIONES HUMANAS PENDIENTES">PENDING HUMAN ACTION LOG (LOCAL ONLY)</b><p data-en="No local actions yet." data-es="Todavía no hay acciones locales.">No local actions yet.</p></div>
   </aside>
 </main>
@@ -137,7 +141,9 @@
       rows = `<tr><td>zone</td><td>${esc(props.zone_id)} (${esc(props.kind)})</td></tr>`;
     }
     const prov = props.source ? provenanceRows(props) : "";
-    return `<b>${head}</b><table class="popup-table">${rows}${prov}</table>`;
+    const flags = (props.findings && props.findings.length)
+      ? `<tr><td>findings</td><td class="state-conflicting">${props.findings.map(esc).join(", ")}</td></tr>` : "";
+    return `<b>${head}</b><table class="popup-table">${rows}${prov}${flags}</table>`;
   }
 
   function routeStyle(props) {
@@ -284,7 +290,7 @@
 
     const legend = document.createElement("div");
     legend.className = "legend";
-    legend.innerHTML = `<i style="background:#ff886d"></i>request &nbsp;<i style="background:#f2c76e"></i>needs review / not usable &nbsp;<i style="background:#3781d0"></i>resource &nbsp;<i style="background:#40ad7b"></i>shelter<br><span style="color:#59c9de">&#9476;&#9476;</span> usable route &nbsp;<span style="color:#ff886d">&#9476;&#9476;</span> closed &nbsp;<span style="color:#f2c76e">&#9476;&#9476;</span> unverified/conflicting`;
+    legend.innerHTML = `<i style="background:#ff886d"></i>request &nbsp;<i style="background:#f2c76e"></i>needs review / not usable &nbsp;<i style="background:#3781d0"></i>resource &nbsp;<i style="background:#40ad7b"></i>shelter<br><span style="color:#59c9de">&#9476;&#9476;</span> usable route &nbsp;<span style="color:#ff886d">&#9476;&#9476;</span> closed &nbsp;<span style="color:#f2c76e">&#9476;&#9476;</span> unverified / conflicting / stale`;
     document.getElementById("map").appendChild(legend);
 
     planSha = seal ? seal.sha256 : null;
@@ -308,6 +314,16 @@
     }
 
     renderProposals(plan);
+    if (Array.isArray(plan.validation_findings) && plan.validation_findings.length) {
+      document.getElementById("findings").style.display = "block";
+      const list = document.getElementById("findingslist");
+      plan.validation_findings.forEach(f => {
+        const p = document.createElement("p");
+        p.style.margin = "4px 0";
+        p.innerHTML = `<b style="color:${f.severity === "warn" ? "#ff886d" : "#59c9de"}">${esc(f.code)}</b> ${esc(f.entity_type)} ${esc(f.entity_id)} — ${esc(f.detail)}`;
+        list.appendChild(p);
+      });
+    }
     if (seal) {
       document.getElementById("sealinfo").innerHTML =
         `plan seal sha256 <code>${esc(seal.sha256)}</code> · scenario <code>${esc(seal.scenario_sha256.slice(0, 16))}…</code>${chainNote}`;

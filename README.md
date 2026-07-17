@@ -42,9 +42,19 @@ python3 -m pytest -q
 ## Export a plan and run the incident room
 
 ```bash
-python3 -m lifeline plan scenarios/flood_v1.json --out out
+python3 -m lifeline plan scenarios/flood_v1.json --out out --reference-time 2026-07-17T11:00:00Z
 python3 -m lifeline serve --out out
 ```
+
+Before planning, deterministic validators corroborate the declared evidence:
+contradictory route reports are downgraded to `conflicting`, near-identical
+requests are flagged as possible duplicates and downgraded to `unverified`,
+and — only when an explicit `--reference-time` is supplied — declared
+freshness is checked against report age and downgraded when stale. Validators
+can only downgrade, never upgrade; every change is recorded as a finding
+sealed inside `plan.json`. Without a reference time, staleness is reported as
+unchecked rather than silently assumed fresh. Planning never relies on
+closed, non-verified, or stale (`low` freshness) routes.
 
 Open `http://127.0.0.1:8788/web/room.html`. The room renders only what the
 kernel exported: `out/room.geojson` (display layer, floats allowed),

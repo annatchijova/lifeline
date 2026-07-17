@@ -9,15 +9,17 @@ is deliberately outside the seal.
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 
 from lifeline.core import DispatchProposal
-from lifeline.scenario import Scenario, load_scenario, plan_scenario
+from lifeline.scenario import Scenario, load_scenario, plan_scenario, route_usable
+from lifeline.validators import Finding, validate_scenario
 
 CANONICALIZE_VERSION = 1
-PLAN_VERSION = 1
+PLAN_VERSION = 2
 
 
 class CanonicalizationError(ValueError):
@@ -54,10 +56,17 @@ def seal_digest(value) -> str:
     return sha256(canonicalize(value)).hexdigest()
 
 
-def plan_payload(scenario: Scenario, proposals: list[DispatchProposal]) -> dict:
+def plan_payload(
+    scenario: Scenario,
+    proposals: list[DispatchProposal],
+    findings: tuple[Finding, ...] | list[Finding] = (),
+    reference_time: str | None = None,
+) -> dict:
     return {
         "plan_version": PLAN_VERSION,
         "scenario_id": scenario.scenario_id,
+        "reference_time": reference_time,
+        "validation_findings": [finding.as_dict() for finding in findings],
         "proposals": [
             {
                 "request_id": proposal.request_id,
@@ -77,9 +86,20 @@ def _point(lon: float, lat: float, properties: dict) -> dict:
     return {"type": "Feature", "geometry": {"type": "Point", "coordinates": [lon, lat]}, "properties": properties}
 
 
-def room_geojson(scenario: Scenario, proposals: list[DispatchProposal]) -> dict:
+def room_geojson(
+    scenario: Scenario,
+    proposals: list[DispatchProposal],
+    findings: tuple[Finding, ...] | list[Finding] = (),
+) -> dict:
     zones = {zone.zone_id: zone for zone in scenario.zones}
     outcome = {proposal.request_id: proposal for proposal in proposals}
+    finding_codes: dict[tuple[str, str], list[str]] = {}
+    for finding in findings:
+        finding_codes.setdefault((finding.entity_type, finding.entity_id), []).append(finding.code)
+
+    def codes(entity_type: str, entity_id: str) -> list[str]:
+        return finding_codes.get((entity_type, entity_id), [])
+
     features: list[dict] = []
 
     for zone in scenario.zones:
@@ -105,6 +125,7 @@ def room_geojson(scenario: Scenario, proposals: list[DispatchProposal]) -> dict:
             "observed_at": reported.provenance.observed_at,
             "verification_state": reported.provenance.verification_state,
             "freshness": reported.provenance.freshness,
+            "findings": codes("request", request.request_id),
         }))
 
     assigned = {p.resource_id: p.request_id for p in proposals if p.resource_id is not None}
@@ -120,6 +141,7 @@ def room_geojson(scenario: Scenario, proposals: list[DispatchProposal]) -> dict:
             "observed_at": reported.provenance.observed_at,
             "verification_state": reported.provenance.verification_state,
             "freshness": reported.provenance.freshness,
+            "findings": codes("resource", resource.resource_id),
         }))
 
     for reported in scenario.shelters:
@@ -132,13 +154,14 @@ def room_geojson(scenario: Scenario, proposals: list[DispatchProposal]) -> dict:
             "observed_at": reported.provenance.observed_at,
             "verification_state": reported.provenance.verification_state,
             "freshness": reported.provenance.freshness,
+            "findings": codes("shelter", shelter.shelter_id),
         }))
 
     for reported in scenario.routes:
         route = reported.route
         origin = zones[route.origin]
         destination = zones[route.destination]
-        usable = route.open and reported.provenance.verification_state == "verified"
+        usable = route_usable(reported)
         features.append({
             "type": "Feature",
             "geometry": {"type": "LineString", "coordinates": [
@@ -152,20 +175,30 @@ def room_geojson(scenario: Scenario, proposals: list[DispatchProposal]) -> dict:
                 "observed_at": reported.provenance.observed_at,
                 "verification_state": reported.provenance.verification_state,
                 "freshness": reported.provenance.freshness,
+                "findings": codes("route", f"{route.origin}->{route.destination}"),
             },
         })
 
     return {"type": "FeatureCollection", "features": features}
 
 
-def export_plan(scenario_path: str | Path, out_dir: str | Path) -> dict:
+@dataclass(frozen=True)
+class ExportResult:
+    seal: dict
+    scenario: Scenario
+    proposals: list[DispatchProposal]
+    findings: list[Finding]
+
+
+def export_plan(scenario_path: str | Path, out_dir: str | Path, reference_time: str | None = None) -> ExportResult:
+    """Validate, corroborate, plan, seal, and write the room artifacts."""
     scenario_path = Path(scenario_path)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
 
-    scenario = load_scenario(scenario_path)
+    scenario, findings = validate_scenario(load_scenario(scenario_path), reference_time)
     proposals = plan_scenario(scenario)
-    payload = plan_payload(scenario, proposals)
+    payload = plan_payload(scenario, proposals, findings, reference_time)
     digest = seal_digest(payload)
 
     (out / "plan.json").write_text(
@@ -180,5 +213,5 @@ def export_plan(scenario_path: str | Path, out_dir: str | Path) -> dict:
     (out / "plan.seal.json").write_text(
         json.dumps(seal, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     (out / "room.geojson").write_text(
-        json.dumps(room_geojson(scenario, proposals), indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-    return seal
+        json.dumps(room_geojson(scenario, proposals, findings), indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    return ExportResult(seal, scenario, proposals, findings)
