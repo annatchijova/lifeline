@@ -96,9 +96,11 @@ client-supplied name. Verify everything offline with:
 python3 -m lifeline verify --out out
 ```
 
-This recomputes the plan seal and checks the approvals chain; altered,
-inserted, reordered, or dropped interior entries fail verification. Tail
-truncation is only detectable once an external anchor exists (roadmap).
+This recomputes the plan seal, checks the approvals chain, and—when local
+incidents exist—checks every incident snapshot against the tip of its
+hash-linked event ledger. Altered, inserted, reordered, or dropped interior
+entries fail verification. Tail truncation is only detectable once an external
+anchor exists (roadmap).
 
 ## Local incident backend
 

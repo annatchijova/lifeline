@@ -157,6 +157,18 @@ def _verify(out_dir: Path) -> int:
             print(f"approvals chain: FAIL ({error})")
             failed = True
 
+    incidents_path = out_dir / "incidents.sqlite3"
+    if not incidents_path.exists():
+        print("incident ledger: ABSENT (no local incidents recorded)")
+    else:
+        from lifeline.incidents import IncidentStore, IncidentStoreError
+        try:
+            count = IncidentStore(incidents_path).verify_all()
+            print(f"incident ledger: PASS ({count} incident(s); snapshot and hash-linked event tips agree)")
+        except IncidentStoreError as error:
+            print(f"incident ledger: FAIL ({error})")
+            failed = True
+
     return 1 if failed else 0
 
 

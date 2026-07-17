@@ -170,6 +170,23 @@ class IncidentStore:
                 raise IncidentStoreError(f"incident '{incident_id}' event hash does not match its content")
             expected_prev = row["event_hash"]
 
+    def _verified_snapshot(self, conn: sqlite3.Connection, incident_id: str) -> IncidentSnapshot:
+        """Return a snapshot only when it is the state sealed by the ledger tip."""
+        snapshot = self._snapshot(conn, incident_id)
+        self._verify_events(conn, incident_id)
+        tip = conn.execute(
+            """SELECT revision, scenario_sha256 FROM incident_events
+               WHERE incident_id = ? ORDER BY revision DESC LIMIT 1""",
+            (incident_id,),
+        ).fetchone()
+        if tip is None:
+            raise IncidentStoreError(f"incident '{incident_id}' has no creation event")
+        if tip["revision"] != snapshot.revision:
+            raise IncidentStoreError(f"incident '{incident_id}' snapshot revision is not the ledger tip")
+        if tip["scenario_sha256"] != snapshot.scenario_sha256:
+            raise IncidentStoreError(f"incident '{incident_id}' snapshot hash is not sealed by the ledger tip")
+        return snapshot
+
     def _append_event(
         self,
         conn: sqlite3.Connection,
@@ -251,7 +268,15 @@ class IncidentStore:
 
     def get(self, incident_id: str) -> IncidentSnapshot:
         with self._connect() as conn:
-            return self._snapshot(conn, incident_id)
+            return self._verified_snapshot(conn, incident_id)
+
+    def verify_all(self) -> int:
+        """Verify every incident's snapshot, event chain, and ledger-tip linkage."""
+        with self._connect() as conn:
+            incident_ids = [row["incident_id"] for row in conn.execute("SELECT incident_id FROM incidents ORDER BY incident_id")]
+            for incident_id in incident_ids:
+                self._verified_snapshot(conn, incident_id)
+        return len(incident_ids)
 
     def add_report(self, incident_id: str, entity_type: str, report: dict) -> IncidentSnapshot:
         if entity_type not in ENTITY_COLLECTIONS:
@@ -265,8 +290,7 @@ class IncidentStore:
 
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            snapshot = self._snapshot(conn, incident_id)
-            self._verify_events(conn, incident_id)
+            snapshot = self._verified_snapshot(conn, incident_id)
             updated = json.loads(_canonical_json(snapshot.scenario))
             entries = updated.get(collection)
             if not isinstance(entries, list):
@@ -312,8 +336,7 @@ class IncidentStore:
 
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            snapshot = self._snapshot(conn, incident_id)
-            self._verify_events(conn, incident_id)
+            snapshot = self._verified_snapshot(conn, incident_id)
             updated = json.loads(_canonical_json(snapshot.scenario))
             entries = updated.get(collection)
             if not isinstance(entries, list):
@@ -349,8 +372,7 @@ class IncidentStore:
         if after_revision < 0:
             raise IncidentStoreError("after_revision must be zero or positive")
         with self._connect() as conn:
-            self._snapshot(conn, incident_id)
-            self._verify_events(conn, incident_id)
+            self._verified_snapshot(conn, incident_id)
             rows = conn.execute(
                 """SELECT revision, event_type, entity_type, entity_id, submitted_at, payload_json,
                           scenario_sha256, prev_hash, event_hash
@@ -361,8 +383,7 @@ class IncidentStore:
 
     def plan(self, incident_id: str, reference_time: str | None = None) -> dict:
         with self._connect() as conn:
-            snapshot = self._snapshot(conn, incident_id)
-            self._verify_events(conn, incident_id)
+            snapshot = self._verified_snapshot(conn, incident_id)
         try:
             scenario, findings = validate_scenario(parse_scenario(snapshot.scenario), reference_time)
         except ScenarioError as error:

@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from lifeline.incidents import IncidentConflict, IncidentStore
+from lifeline.incidents import IncidentConflict, IncidentStore, _digest
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -89,3 +89,28 @@ def test_incident_store_refuses_a_tampered_event_chain(tmp_path):
 
     with pytest.raises(ValueError, match="event hash"):
         store.events(created.incident_id)
+
+
+def test_incident_store_refuses_snapshot_not_sealed_by_ledger_tip(tmp_path):
+    path = tmp_path / "incidents.sqlite3"
+    store = IncidentStore(path)
+    created = store.create(_scenario())
+    replacement = _scenario()
+    replacement["requests"] = replacement["requests"][:-1]
+
+    import sqlite3
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            "UPDATE incidents SET scenario_json = ?, scenario_sha256 = ? WHERE incident_id = ?",
+            (json.dumps(replacement, sort_keys=True, separators=(",", ":")), _digest(replacement), created.incident_id),
+        )
+
+    with pytest.raises(ValueError, match="not sealed by the ledger tip"):
+        store.get(created.incident_id)
+
+
+def test_verify_all_returns_count_for_intact_ledger(tmp_path):
+    store = IncidentStore(tmp_path / "incidents.sqlite3")
+    store.create(_scenario())
+
+    assert store.verify_all() == 1
