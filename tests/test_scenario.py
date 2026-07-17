@@ -91,7 +91,7 @@ def test_non_verified_route_is_unusable_even_if_reported_open():
     plan = plan_scenario(parse_scenario(raw))
     by_id = {proposal.request_id: proposal for proposal in plan}
     assert by_id["family-south"].status == "NEEDS_HUMAN_REVIEW"
-    assert "no reachable shelter capacity" in by_id["family-south"].reasons
+    assert "no reachable destination shelter capacity" in by_id["family-south"].reasons
 
 
 def test_stale_route_is_unusable_even_if_open_and_verified():
@@ -100,7 +100,19 @@ def test_stale_route_is_unusable_even_if_open_and_verified():
     raw["routes"][1]["freshness"] = "low"
     plan = {p.request_id: p for p in plan_scenario(parse_scenario(raw))}
     assert plan["family-north"].status == "NEEDS_HUMAN_REVIEW"
-    assert "no reachable shelter capacity" in plan["family-north"].reasons
+    assert "no reachable destination shelter capacity" in plan["family-north"].reasons
+
+
+def test_unverified_resource_or_shelter_cannot_support_a_proposal():
+    raw = _raw()
+    raw["resources"][0]["verification_state"] = "unverified"
+    raw["shelters"][0]["freshness"] = "low"
+
+    plan = {proposal.request_id: proposal for proposal in plan_scenario(parse_scenario(raw))}
+
+    assert plan["family-north"].status == "NEEDS_HUMAN_REVIEW"
+    assert "no eligible available resource" in plan["family-north"].reasons
+    assert "no reachable destination shelter capacity" in plan["family-north"].reasons
 
 
 def test_plan_is_ordered_by_urgency_across_gated_and_planned():

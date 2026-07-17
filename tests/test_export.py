@@ -65,6 +65,20 @@ def test_sealed_plan_contains_no_floats(tmp_path):
     walk(plan)
 
 
+def test_sealed_plan_contains_a_complete_non_authoritative_briefing(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    plan = json.loads((tmp_path / "plan.json").read_text())
+
+    briefing = plan["briefing"]
+    assert briefing["proposal_counts"] == {
+        "proposed": 2, "needs_human_review": 2, "total": 4,
+    }
+    assert [item["request_id"] for item in briefing["review_queue"]] == [
+        "family-south", "group-riverside",
+    ]
+    assert "not a priority score" in briefing["limitations"][0]
+
+
 def test_room_geojson_carries_provenance_and_gated_outcomes(tmp_path):
     export_plan(SCENARIO_PATH, tmp_path)
     room = json.loads((tmp_path / "room.geojson").read_text())

@@ -14,12 +14,13 @@ from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 
+from lifeline.briefing import incident_briefing
 from lifeline.core import DispatchProposal
 from lifeline.scenario import Scenario, load_scenario, plan_scenario, route_usable
 from lifeline.validators import Finding, validate_scenario
 
 CANONICALIZE_VERSION = 1
-PLAN_VERSION = 2
+PLAN_VERSION = 3
 
 
 class CanonicalizationError(ValueError):
@@ -79,6 +80,7 @@ def plan_payload(
             }
             for proposal in proposals
         ],
+        "briefing": incident_briefing(proposals, findings),
     }
 
 

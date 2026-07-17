@@ -6,11 +6,19 @@ field is a declared identity, not a verified one — a documented limitation
 until roles land (roadmap step 3).
 
 Endpoints:
+  GET/POST /api/incidents -> list/search or create validated incidents
+  GET    /api/incidents/{id} -> current revision and scenario
+  POST   /api/incidents/{id}/reports -> append one validated typed report
+  POST   /api/incidents/{id}/corrections -> supersede one report, never silently mutate it
+  GET    /api/incidents/{id}/events?after_revision=N -> append-only event feed
+  GET    /api/incidents/{id}/alerts?after_revision=N -> deterministic attention feed
+  POST   /api/incidents/{id}/plan -> seal a plan from the stored revision
   GET  /api/approvals   -> {"entries": [...], "chain_ok": bool, "chain_error": str|null}
   POST /api/approvals   -> record one decision for a PROPOSED item of the
                            current sealed plan; 409 on stale plan/proposal
                            or duplicate decision.
-Static: / redirects to /web/room.html; only /web/* and /out/* are served.
+Static: / redirects to the bundled synthetic demo. `/web/room.html?mode=live`
+renders only the caller's `/out/*` export.
 """
 
 from __future__ import annotations
@@ -21,13 +29,16 @@ import threading
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from lifeline.approvals import ACTIONS, ApprovalChainError, append_entry, read_entries, verify_chain
+from lifeline.alerts import alerts_from_events
 from lifeline.export import seal_digest
+from lifeline.incidents import IncidentConflict, IncidentNotFound, IncidentStore, IncidentStoreError
 
 MAX_BODY_BYTES = 8192
 MAX_FIELD_LENGTH = 200
+PUBLIC_ARTIFACTS = frozenset({"plan.json", "plan.seal.json", "room.geojson", "simulation.json", "simulation.seal.json"})
 
 
 class ApiError(Exception):
@@ -60,6 +71,20 @@ class RoomHandler(SimpleHTTPRequestHandler):
     def _clean_path(self) -> str:
         return posixpath.normpath(urlparse(self.path).path)
 
+    def _json_body(self) -> dict:
+        length = int(self.headers.get("Content-Length") or 0)
+        if length <= 0:
+            raise ApiError(400, "empty body")
+        if length > MAX_BODY_BYTES:
+            raise ApiError(413, "body too large")
+        try:
+            value = json.loads(self.rfile.read(length).decode("utf-8"))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise ApiError(400, "body must be valid JSON")
+        if not isinstance(value, dict):
+            raise ApiError(400, "body must be a JSON object")
+        return value
+
     def translate_path(self, path):
         clean = self._clean_path()
         if clean == "/out" or clean.startswith("/out/"):
@@ -77,6 +102,14 @@ class RoomHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self):
         clean = self._clean_path()
+        parsed = urlparse(self.path)
+        if clean == "/api/incidents":
+            query = parse_qs(parsed.query).get("q", [""])[0]
+            self._send_json(200, {"incidents": self.server.incidents.list(query)})
+            return
+        if clean.startswith("/api/incidents/"):
+            self._get_incident(clean, parsed.query)
+            return
         if clean == "/api/approvals":
             entries = []
             chain_error = None
@@ -89,16 +122,35 @@ class RoomHandler(SimpleHTTPRequestHandler):
             return
         if clean == "/":
             self.send_response(302)
-            self.send_header("Location", "/web/room.html")
+            self.send_header("Location", "/web/room.html?mode=demo")
             self.end_headers()
             return
-        if clean == "/web" or clean.startswith("/web/") or clean.startswith("/out/"):
+        if clean.startswith("/out/"):
+            artifact = clean.rsplit("/", 1)[-1]
+            if artifact not in PUBLIC_ARTIFACTS:
+                self.send_error(404, "artifact is not publicly served")
+                return
             super().do_GET()
             return
-        self.send_error(404, "only /web/, /out/, and /api/approvals are served")
+        if clean == "/web" or clean.startswith("/web/"):
+            super().do_GET()
+            return
+        self.send_error(404, "only /web/, selected /out/ artifacts, and /api/ are served")
 
     def do_POST(self):
-        if self._clean_path() != "/api/approvals":
+        clean = self._clean_path()
+        if clean == "/api/incidents":
+            try:
+                snapshot = self.server.incidents.create(self._json_body())
+            except (IncidentStoreError, IncidentConflict) as error:
+                self._send_json(409 if isinstance(error, IncidentConflict) else 400, {"error": str(error)})
+                return
+            self._send_json(201, self._snapshot_payload(snapshot))
+            return
+        if clean.startswith("/api/incidents/"):
+            self._post_incident(clean)
+            return
+        if clean != "/api/approvals":
             self.send_error(404)
             return
         try:
@@ -109,17 +161,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
         self._send_json(201, {"entry": entry})
 
     def _record_approval(self) -> dict:
-        length = int(self.headers.get("Content-Length") or 0)
-        if length <= 0:
-            raise ApiError(400, "empty body")
-        if length > MAX_BODY_BYTES:
-            raise ApiError(413, "body too large")
-        try:
-            body = json.loads(self.rfile.read(length).decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            raise ApiError(400, "body must be valid JSON")
-        if not isinstance(body, dict):
-            raise ApiError(400, "body must be a JSON object")
+        body = self._json_body()
 
         fields = {}
         for name in ("request_id", "action", "approver", "proposal_audit_hash", "plan_sha256"):
@@ -164,6 +206,94 @@ class RoomHandler(SimpleHTTPRequestHandler):
             except ApprovalChainError as error:
                 raise ApiError(400, str(error))
 
+    @staticmethod
+    def _snapshot_payload(snapshot) -> dict:
+        return {
+            "incident_id": snapshot.incident_id,
+            "revision": snapshot.revision,
+            "scenario_sha256": snapshot.scenario_sha256,
+            "updated_at": snapshot.updated_at,
+            "scenario": snapshot.scenario,
+        }
+
+    @staticmethod
+    def _incident_path(clean: str) -> tuple[str, str | None]:
+        parts = [part for part in clean.split("/") if part]
+        # /api/incidents/{id}[/events|reports|plan]
+        if len(parts) not in (3, 4) or parts[:2] != ["api", "incidents"]:
+            raise ApiError(404, "unknown incidents endpoint")
+        incident_id = unquote(parts[2])
+        if not incident_id:
+            raise ApiError(404, "incident id is required")
+        return incident_id, parts[3] if len(parts) == 4 else None
+
+    def _get_incident(self, clean: str, query: str) -> None:
+        try:
+            incident_id, action = self._incident_path(clean)
+            if action is None:
+                self._send_json(200, self._snapshot_payload(self.server.incidents.get(incident_id)))
+                return
+            if action == "events":
+                raw_after = parse_qs(query).get("after_revision", ["0"])[0]
+                try:
+                    after_revision = int(raw_after)
+                except ValueError:
+                    raise ApiError(400, "after_revision must be an integer")
+                self._send_json(200, {"incident_id": incident_id, "events": self.server.incidents.events(incident_id, after_revision)})
+                return
+            if action == "alerts":
+                raw_after = parse_qs(query).get("after_revision", ["0"])[0]
+                try:
+                    after_revision = int(raw_after)
+                except ValueError:
+                    raise ApiError(400, "after_revision must be an integer")
+                events = self.server.incidents.events(incident_id, after_revision)
+                self._send_json(200, {"incident_id": incident_id, "alerts": alerts_from_events(events)})
+                return
+            raise ApiError(404, "unknown incidents endpoint")
+        except IncidentNotFound as error:
+            self._send_json(404, {"error": str(error)})
+        except IncidentStoreError as error:
+            self._send_json(400, {"error": str(error)})
+        except ApiError as error:
+            self._send_json(error.status, {"error": error.message})
+
+    def _post_incident(self, clean: str) -> None:
+        try:
+            incident_id, action = self._incident_path(clean)
+            body = self._json_body()
+            if action == "reports":
+                entity_type = body.get("entity_type")
+                report = body.get("report")
+                if not isinstance(entity_type, str):
+                    raise ApiError(400, "entity_type must be a string")
+                snapshot = self.server.incidents.add_report(incident_id, entity_type, report)
+                self._send_json(201, self._snapshot_payload(snapshot))
+                return
+            if action == "corrections":
+                entity_type = body.get("entity_type")
+                report = body.get("report")
+                if not isinstance(entity_type, str):
+                    raise ApiError(400, "entity_type must be a string")
+                snapshot = self.server.incidents.supersede_report(incident_id, entity_type, report)
+                self._send_json(201, self._snapshot_payload(snapshot))
+                return
+            if action == "plan":
+                reference_time = body.get("reference_time")
+                if reference_time is not None and not isinstance(reference_time, str):
+                    raise ApiError(400, "reference_time must be a string or null")
+                self._send_json(200, self.server.incidents.plan(incident_id, reference_time))
+                return
+            raise ApiError(404, "unknown incidents endpoint")
+        except IncidentNotFound as error:
+            self._send_json(404, {"error": str(error)})
+        except IncidentConflict as error:
+            self._send_json(409, {"error": str(error)})
+        except IncidentStoreError as error:
+            self._send_json(400, {"error": str(error)})
+        except ApiError as error:
+            self._send_json(error.status, {"error": error.message})
+
 
 def make_server(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.1", port: int = 8788) -> ThreadingHTTPServer:
     server = ThreadingHTTPServer((host, port), RoomHandler)
@@ -171,6 +301,7 @@ def make_server(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.
     server.out_dir = Path(out_dir).resolve()
     server.approvals_path = server.out_dir / "approvals.jsonl"
     server.approvals_lock = threading.Lock()
+    server.incidents = IncidentStore(server.out_dir / "incidents.sqlite3")
     return server
 
 

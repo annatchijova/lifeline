@@ -82,6 +82,24 @@ def test_reference_time_without_timezone_is_rejected():
         validate_scenario(load_scenario(SCENARIO_PATH), reference_time="2026-07-17T13:30:00")
 
 
+def test_future_or_unparseable_operational_timestamps_are_downgraded_not_used():
+    raw = _raw()
+    raw["resources"][0]["observed_at"] = "2026-07-17T14:00:00Z"
+    raw["shelters"][0]["observed_at"] = "not-a-timestamp"
+
+    scenario, findings = validate_scenario(
+        parse_scenario(raw), reference_time="2026-07-17T13:30:00Z")
+    by_resource = {item.resource.resource_id: item for item in scenario.resources}
+    by_shelter = {item.shelter.shelter_id: item for item in scenario.shelters}
+
+    assert by_resource["boat-02"].provenance.freshness == "low"
+    assert by_shelter["shelter-a"].provenance.freshness == "low"
+    assert {"FUTURE_TIMESTAMP", "UNPARSEABLE_TIMESTAMP"} <= set(_codes(findings))
+
+    plan = {proposal.request_id: proposal for proposal in plan_scenario(scenario)}
+    assert plan["family-north"].status == "NEEDS_HUMAN_REVIEW"
+
+
 def test_findings_are_deterministically_ordered():
     a = validate_scenario(load_scenario(SCENARIO_PATH), reference_time="2026-07-17T13:30:00Z")[1]
     b = validate_scenario(load_scenario(SCENARIO_PATH), reference_time="2026-07-17T13:30:00Z")[1]

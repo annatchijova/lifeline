@@ -127,15 +127,15 @@ def _check_staleness(scenario: Scenario, reference_time: str | None, findings: l
         if age is None:
             findings.append(Finding(
                 "UNPARSEABLE_TIMESTAMP", "warn", entity_type, entity_id,
-                f"observed_at {provenance.observed_at!r} is not ISO 8601 with timezone; staleness unknown",
+                f"observed_at {provenance.observed_at!r} is not ISO 8601 with timezone; downgraded to 'low' freshness",
             ))
-            return provenance
+            return replace(provenance, freshness="low")
         if age < 0:
             findings.append(Finding(
                 "FUTURE_TIMESTAMP", "warn", entity_type, entity_id,
-                f"observed_at is {-age} minutes after the reference time",
+                f"observed_at is {-age} minutes after the reference time; downgraded to 'low' freshness",
             ))
-            return provenance
+            return replace(provenance, freshness="low")
         computed = _stale_level(age)
         if FRESHNESS_ORDER[computed] < FRESHNESS_ORDER[provenance.freshness]:
             findings.append(Finding(

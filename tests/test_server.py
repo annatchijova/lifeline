@@ -42,12 +42,33 @@ def _post(base, payload):
         return error.code, json.loads(error.read())
 
 
+def _post_to(base, path, payload):
+    request = urllib.request.Request(
+        f"{base}{path}", data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json"}, method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read())
+
+
 def _get(base, path):
     try:
         with urllib.request.urlopen(f"{base}{path}") as response:
             return response.status, response.read()
     except urllib.error.HTTPError as error:
         return error.code, b""
+
+
+def _get_json(base, path):
+    request = urllib.request.Request(f"{base}{path}")
+    try:
+        with urllib.request.urlopen(request) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read())
 
 
 def _proposed(plan):
@@ -117,9 +138,56 @@ def test_rejects_decisions_on_gated_items_and_bad_input(room):
 
 def test_static_scope_is_restricted(room):
     base, _, seal, _ = room
+    status, _ = _get(base, "/")
+    assert status == 200
     assert _get(base, "/web/room.html")[0] == 200
     status, body = _get(base, "/out/plan.seal.json")
     assert status == 200 and json.loads(body)["sha256"] == seal["sha256"]
+    status, body = _get(base, "/web/demo/plan.seal.json")
+    assert status == 200 and "sha256" in json.loads(body)
     assert _get(base, "/.git/config")[0] == 404
     assert _get(base, "/web/../.git/config")[0] == 404
     assert _get(base, "/lifeline/core.py")[0] == 404
+
+
+def test_incident_api_creates_searches_appends_and_plans(room):
+    base, _, _, _ = room
+    scenario = json.loads(SCENARIO_PATH.read_text())
+    status, created = _post_to(base, "/api/incidents", scenario)
+    assert status == 201
+    assert created["revision"] == 1
+
+    status, listing = _get_json(base, "/api/incidents?q=flood-v1")
+    assert status == 200
+    assert listing["incidents"][0]["incident_id"] == "flood-v1-synthetic"
+
+    request = {
+        "request_id": "family-api", "people": 2, "urgency": 4, "medical_need": False,
+        "pickup_zone": "north-bank", "destination_zone": "shelter-a",
+        "source": "operator-api", "source_type": "verified_operator",
+        "observed_at": "2026-07-17T10:00:00Z", "verification_state": "verified", "freshness": "high",
+    }
+    status, updated = _post_to(base, "/api/incidents/flood-v1-synthetic/reports", {
+        "entity_type": "request", "report": request,
+    })
+    assert status == 201 and updated["revision"] == 2
+
+    corrected_boat = scenario["resources"][0] | {"available": False, "observed_at": "2026-07-17T10:30:00Z"}
+    status, corrected = _post_to(base, "/api/incidents/flood-v1-synthetic/corrections", {
+        "entity_type": "resource", "report": corrected_boat,
+    })
+    assert status == 201 and corrected["revision"] == 3
+
+    status, events = _get_json(base, "/api/incidents/flood-v1-synthetic/events?after_revision=1")
+    assert status == 200 and [event["event_type"] for event in events["events"]] == ["report_added", "report_superseded"]
+
+    status, alerts = _get_json(base, "/api/incidents/flood-v1-synthetic/alerts?after_revision=2")
+    assert status == 200
+    assert any(alert["code"] == "REPORT_SUPERSEDED" for alert in alerts["alerts"])
+    assert all(alert["dispatch_authority"] == "none" for alert in alerts["alerts"])
+
+    status, planned = _post_to(base, "/api/incidents/flood-v1-synthetic/plan", {
+        "reference_time": "2026-07-17T11:00:00Z",
+    })
+    assert status == 200
+    assert planned["revision"] == 3 and planned["seal"]["sha256"]

@@ -44,7 +44,7 @@ def test_unreachable_or_capacity_constrained_requests_need_human_review():
 
     assert plan[0].status == "NEEDS_HUMAN_REVIEW"
     assert plan[0].resource_id is None
-    assert "no reachable shelter capacity" in plan[0].reasons
+    assert "no reachable destination shelter capacity" in plan[0].reasons
 
 
 def test_audit_hash_is_deterministic():
@@ -55,3 +55,23 @@ def test_audit_hash_is_deterministic():
         _routes(),
     )
     assert plan_response(*args)[0].audit_hash == plan_response(*args)[0].audit_hash
+
+
+def test_planner_never_substitutes_a_different_destination_shelter():
+    plan = plan_response(
+        [IncidentRequest("family-east", 3, 5, False, "east-bank", "shelter-a")],
+        [Resource("ambulance-01", "ambulance", 3, True, True, "ambulance-base")],
+        [
+            Shelter("shelter-a", "shelter-a", 2, True),
+            Shelter("shelter-b", "shelter-b", 10, True),
+        ],
+        [
+            Route("ambulance-base", "east-bank", 9, True),
+            Route("east-bank", "shelter-a", 12, True),
+            Route("east-bank", "shelter-b", 1, True),
+        ],
+    )
+
+    assert plan[0].status == "NEEDS_HUMAN_REVIEW"
+    assert plan[0].shelter_id is None
+    assert "no reachable destination shelter capacity" in plan[0].reasons

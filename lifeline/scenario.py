@@ -244,15 +244,24 @@ def route_usable(reported: ReportedRoute) -> bool:
     )
 
 
+def operational_evidence_usable(provenance: Provenance) -> bool:
+    """Whether a reported resource or shelter may constrain a proposal.
+
+    A resource that is merely claimed to be available, or a shelter with stale
+    capacity, is still displayed with its provenance but may not silently
+    enter the deterministic proposal path.
+    """
+    return provenance.verification_state == "verified" and provenance.freshness != "low"
+
+
 def plan_scenario(scenario: Scenario) -> list[DispatchProposal]:
     """Gate unverified evidence, then run the deterministic planner.
 
-    Only verified requests may influence a proposal. Unverified or
-    conflicting requests surface as NEEDS_HUMAN_REVIEW instead of being
-    silently planned or silently dropped. Routes that are closed, not
-    verified, or stale (freshness 'low', declared or corroborated) are
-    unusable for planning; the display layer still shows their reported
-    state.
+    Only verified, non-stale operational evidence may influence a proposal.
+    Unverified or conflicting requests surface as NEEDS_HUMAN_REVIEW instead
+    of being silently planned or silently dropped. Resources, shelters, and
+    routes with unverified, conflicting, or low-freshness evidence remain in
+    the display layer but are excluded from planning.
     """
     gated: list[DispatchProposal] = []
     verified_requests: list[IncidentRequest] = []
@@ -272,8 +281,8 @@ def plan_scenario(scenario: Scenario) -> list[DispatchProposal]:
     ]
     planned = plan_response(
         verified_requests,
-        [item.resource for item in scenario.resources],
-        [item.shelter for item in scenario.shelters],
+        [item.resource for item in scenario.resources if operational_evidence_usable(item.provenance)],
+        [item.shelter for item in scenario.shelters if operational_evidence_usable(item.provenance)],
         usable_routes,
     )
 
