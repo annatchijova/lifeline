@@ -54,3 +54,6 @@ Open `http://127.0.0.1:8788`.
 2. Real routing adapters with explicit freshness and source metadata.
 3. Per-organization roles, approvals, and offline synchronization.
 4. Optional model narration outside the planning authority boundary.
+
+See [LIFELINE OS](docs/LIFELINE_OS.md) for the product architecture, ethical
+boundaries, simulation model, and the research patterns that inform it.
