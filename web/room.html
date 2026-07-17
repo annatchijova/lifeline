@@ -89,7 +89,7 @@
       <div id="simlist"></div>
       <p id="simlimits" style="margin:8px 0 0;font-size:.8rem;color:#b391a0"></p>
     </div>
-    <div id="humanlog"><b data-en="PENDING HUMAN ACTION LOG (LOCAL ONLY)" data-es="REGISTRO LOCAL DE ACCIONES HUMANAS PENDIENTES">PENDING HUMAN ACTION LOG (LOCAL ONLY)</b><p data-en="No local actions yet." data-es="Todavía no hay acciones locales.">No local actions yet.</p></div>
+    <div id="humanlog"><b data-en="PENDING HUMAN ACTION LOG (LOCAL ONLY)" data-es="REGISTRO LOCAL DE ACCIONES HUMANAS PENDIENTES">PENDING HUMAN ACTION LOG (LOCAL ONLY)</b><div id="loglist"></div></div>
   </aside>
 </main>
 <footer>
@@ -101,53 +101,109 @@
 (() => {
   const COLORS = { request: "#ff886d", resource: "#3781d0", shelter: "#40ad7b", zone: "#9ec3cb" };
   const root = document.documentElement;
+  const esc = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const w = (en, es) => (root.dataset.language === "es" ? es : en);
+
+  const state = {
+    room: null, plan: null, seal: null, sim: null,
+    decisions: {}, log: [], apiMode: false, planSha: null,
+    chain: null, popupLayers: [], legend: null,
+  };
 
   function setLanguage(language) {
     root.lang = language; root.dataset.language = language;
     document.querySelectorAll("[data-en][data-es]").forEach(el => { el.innerHTML = el.dataset[language]; });
     document.querySelectorAll("[data-language]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.language === language)));
+    if (state.plan) renderAll();
   }
   document.querySelectorAll("[data-language]").forEach(b => b.addEventListener("click", () => setLanguage(b.dataset.language)));
 
-  const esc = value => String(value).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // Sealed kernel strings stay English on disk; these are display-only translations.
+  const REASONS_ES = {
+    "human approval required": "requiere aprobación humana",
+    "no eligible available resource": "sin recurso disponible elegible",
+    "no reachable shelter capacity": "sin capacidad de refugio alcanzable",
+    "unverified report": "reporte no verificado",
+    "conflicting reports": "reportes contradictorios",
+  };
+  const KEYS_ES = { urgency: "urgencia", people: "personas", resource: "recurso", shelter: "refugio", eta_minutes: "eta_minutos" };
+  function reasonText(reason) {
+    if (root.dataset.language !== "es") return reason;
+    if (REASONS_ES[reason]) return REASONS_ES[reason];
+    const eq = reason.indexOf("=");
+    if (eq > 0 && KEYS_ES[reason.slice(0, eq)]) return KEYS_ES[reason.slice(0, eq)] + "=" + reason.slice(eq + 1);
+    return reason;
+  }
+  const statusText = status => status === "PROPOSED" ? w("PROPOSED", "PROPUESTO")
+    : status === "NEEDS_HUMAN_REVIEW" ? w("NEEDS HUMAN REVIEW", "REQUIERE REVISIÓN HUMANA") : status;
+  const actionWord = action => action === "approve" ? w("APPROVED", "APROBADO") : w("REJECTED", "RECHAZADO");
+  const yesNo = value => (root.dataset.language === "es" ? (value ? "sí" : "no") : String(value));
+  const stateWord = s => root.dataset.language === "es"
+    ? ({ verified: "verificado", unverified: "no verificado", conflicting: "contradictorio" }[s] || s) : s;
+  const freshWord = f => root.dataset.language === "es"
+    ? ({ high: "alta", medium: "media", low: "baja" }[f] || f) : f;
+  const typeWord = type => root.dataset.language === "es"
+    ? ({ request: "pedido", resource: "recurso", shelter: "refugio", route: "ruta", scenario: "escenario" }[type] || type) : type;
+
+  const DETAIL_PATTERNS_ES = [
+    [/^declared freshness '(\w+)' but report is (\d+) minutes old; downgraded to '(\w+)'$/,
+     m => `frescura declarada '${m[1]}' pero el reporte tiene ${m[2]} minutos; degradada a '${m[3]}'`],
+    [/^(\d+) reports disagree on open state; all downgraded to conflicting$/,
+     m => `${m[1]} reportes discrepan sobre el estado abierto; todos degradados a contradictorio`],
+    [/^same pickup, destination, people, and medical need as '([^']+)'; downgraded to unverified pending human confirmation$/,
+     m => `mismo origen, destino, personas y necesidad médica que '${m[1]}'; degradado a no verificado a la espera de confirmación humana`],
+    [/^no reference time supplied; declared freshness was not corroborated$/,
+     () => "sin hora de referencia; la frescura declarada no fue corroborada"],
+    [/^observed_at is (\d+) minutes after the reference time$/,
+     m => `observed_at es ${m[1]} minutos posterior a la hora de referencia`],
+  ];
+  function detailText(detail) {
+    if (root.dataset.language !== "es") return detail;
+    for (const [pattern, build] of DETAIL_PATTERNS_ES) {
+      const match = detail.match(pattern);
+      if (match) return build(match);
+    }
+    return detail;
+  }
 
   function provenanceRows(p) {
     return `
-      <tr><td>source</td><td>${esc(p.source)} (${esc(p.source_type)})</td></tr>
-      <tr><td>observed</td><td>${esc(p.observed_at)}</td></tr>
-      <tr><td>verification</td><td class="state-${esc(p.verification_state)}">${esc(p.verification_state)}</td></tr>
-      <tr><td>freshness</td><td>${esc(p.freshness)}</td></tr>`;
+      <tr><td>${w("source", "fuente")}</td><td>${esc(p.source)} (${esc(p.source_type)})</td></tr>
+      <tr><td>${w("observed", "observado")}</td><td>${esc(p.observed_at)}</td></tr>
+      <tr><td>${w("verification", "verificación")}</td><td class="state-${esc(p.verification_state)}">${esc(stateWord(p.verification_state))}</td></tr>
+      <tr><td>${w("freshness", "frescura")}</td><td>${esc(freshWord(p.freshness))}</td></tr>`;
   }
 
   function popupFor(props) {
     let head = "", rows = "";
     if (props.feature_type === "request") {
-      head = `Request ${props.request_id}`;
-      rows = `<tr><td>people</td><td>${props.people}</td></tr>
-              <tr><td>urgency</td><td>${props.urgency}${props.medical_need ? " · medical" : ""}</td></tr>
-              <tr><td>outcome</td><td>${esc(props.status)}</td></tr>` +
-             (props.resource_id ? `<tr><td>proposal</td><td>${esc(props.resource_id)} &rarr; ${esc(props.shelter_id)} · ${props.eta_minutes} min</td></tr>` : "");
+      head = `${w("Request", "Pedido")} ${esc(props.request_id)}`;
+      rows = `<tr><td>${w("people", "personas")}</td><td>${props.people}</td></tr>
+              <tr><td>${w("urgency", "urgencia")}</td><td>${props.urgency}${props.medical_need ? w(" · medical", " · médica") : ""}</td></tr>
+              <tr><td>${w("outcome", "resultado")}</td><td>${esc(statusText(props.status))}</td></tr>` +
+             (props.resource_id ? `<tr><td>${w("proposal", "propuesta")}</td><td>${esc(props.resource_id)} &rarr; ${esc(props.shelter_id)} · ${props.eta_minutes} min</td></tr>` : "");
     } else if (props.feature_type === "resource") {
-      head = `Resource ${props.resource_id}`;
-      rows = `<tr><td>kind</td><td>${esc(props.kind)} · cap ${props.capacity}</td></tr>
-              <tr><td>available</td><td>${props.available}</td></tr>
-              <tr><td>medical</td><td>${props.can_transport_medical}</td></tr>` +
-             (props.assigned_request ? `<tr><td>assigned</td><td>${esc(props.assigned_request)}</td></tr>` : "");
+      head = `${w("Resource", "Recurso")} ${esc(props.resource_id)}`;
+      rows = `<tr><td>${w("kind", "tipo")}</td><td>${esc(props.kind)} · cap ${props.capacity}</td></tr>
+              <tr><td>${w("available", "disponible")}</td><td>${yesNo(props.available)}</td></tr>
+              <tr><td>${w("medical", "médico")}</td><td>${yesNo(props.can_transport_medical)}</td></tr>` +
+             (props.assigned_request ? `<tr><td>${w("assigned", "asignado")}</td><td>${esc(props.assigned_request)}</td></tr>` : "");
     } else if (props.feature_type === "shelter") {
-      head = `Shelter ${props.shelter_id}`;
-      rows = `<tr><td>beds open</td><td>${props.beds_open}</td></tr><tr><td>open</td><td>${props.open}</td></tr>`;
+      head = `${w("Shelter", "Refugio")} ${esc(props.shelter_id)}`;
+      rows = `<tr><td>${w("beds open", "camas libres")}</td><td>${props.beds_open}</td></tr>
+              <tr><td>${w("open", "abierto")}</td><td>${yesNo(props.open)}</td></tr>`;
     } else if (props.feature_type === "route") {
-      head = `Route ${props.origin} &rarr; ${props.destination}`;
+      head = `${w("Route", "Ruta")} ${esc(props.origin)} &rarr; ${esc(props.destination)}`;
       rows = `<tr><td>eta</td><td>${props.eta_minutes} min</td></tr>
-              <tr><td>reported open</td><td>${props.reported_open}</td></tr>
-              <tr><td>usable for planning</td><td>${props.usable}</td></tr>`;
+              <tr><td>${w("reported open", "reportada abierta")}</td><td>${yesNo(props.reported_open)}</td></tr>
+              <tr><td>${w("usable for planning", "usable para planificar")}</td><td>${yesNo(props.usable)}</td></tr>`;
     } else {
       head = `${esc(props.name)}`;
-      rows = `<tr><td>zone</td><td>${esc(props.zone_id)} (${esc(props.kind)})</td></tr>`;
+      rows = `<tr><td>${w("zone", "zona")}</td><td>${esc(props.zone_id)} (${esc(props.kind)})</td></tr>`;
     }
     const prov = props.source ? provenanceRows(props) : "";
     const flags = (props.findings && props.findings.length)
-      ? `<tr><td>findings</td><td class="state-conflicting">${props.findings.map(esc).join(", ")}</td></tr>` : "";
+      ? `<tr><td>${w("findings", "hallazgos")}</td><td class="state-conflicting">${props.findings.map(esc).join(", ")}</td></tr>` : "";
     return `<b>${head}</b><table class="popup-table">${rows}${prov}${flags}</table>`;
   }
 
@@ -157,37 +213,24 @@
     return { color: "#59c9de", weight: 3, dashArray: "8 6", opacity: 0.95 };
   }
 
-  let apiMode = false;
-  let planSha = null;
-  let decisions = {};
-
-  function logLine(text) {
-    const log = document.getElementById("humanlog");
-    if (!log.dataset.used) { const first = log.querySelector("p"); if (first) first.remove(); log.dataset.used = "1"; }
-    const entry = document.createElement("p");
-    entry.textContent = text;
-    log.appendChild(entry);
+  function decidedText(entry) {
+    if (entry.recorded) {
+      return `${actionWord(entry.action)} ${w("by", "por")} ${entry.approver} · ${entry.recorded_at} · ${w("chain entry", "entrada de cadena")} #${entry.index} — ${w("no dispatch occurs", "no se despacha nada")}`;
+    }
+    return `${actionWord(entry.action)} ${w("locally only — server unavailable, not recorded, no dispatch occurs", "sólo local — servidor no disponible, sin registrar, no se despacha nada")}`;
   }
 
-  function markDecided(card, entry, recorded) {
-    const decided = document.createElement("div");
-    decided.className = "decided";
-    decided.textContent = recorded
-      ? `${entry.action.toUpperCase()} by ${entry.approver} · ${entry.recorded_at} · chain entry #${entry.index} — no dispatch occurs`
-      : `${entry.action.toUpperCase()} locally only — server unavailable, not recorded, no dispatch occurs`;
-    card.appendChild(decided);
-  }
-
-  async function submitDecision(p, action, card, actions, errorBox) {
+  async function submitDecision(p, action, errorBox) {
     const approver = (document.getElementById("approver").value || "").trim();
     if (!approver) {
-      errorBox.textContent = root.dataset.language === "es" ? "Ingresá un ID de aprobador/a." : "Enter an approver ID.";
+      errorBox.textContent = w("Enter an approver ID.", "Ingresá un ID de aprobador/a.");
       return;
     }
-    if (!apiMode) {
-      actions.remove();
-      markDecided(card, { action, approver }, false);
-      logLine(`${new Date().toISOString()} · ${action.toUpperCase()} ${p.request_id} by ${approver} — LOCAL ONLY, no server`);
+    if (!state.apiMode) {
+      const entry = { action, approver, request_id: p.request_id, recorded: false, ts: new Date().toISOString() };
+      state.decisions[p.request_id] = entry;
+      state.log.push(entry);
+      renderAll();
       return;
     }
     try {
@@ -196,45 +239,49 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           request_id: p.request_id, action, approver,
-          proposal_audit_hash: p.audit_hash, plan_sha256: planSha,
+          proposal_audit_hash: p.audit_hash, plan_sha256: state.planSha,
         }),
       });
       const body = await response.json();
       if (!response.ok) { errorBox.textContent = body.error || `error ${response.status}`; return; }
-      errorBox.textContent = "";
-      actions.remove();
-      markDecided(card, body.entry, true);
-      logLine(`${body.entry.recorded_at} · ${action.toUpperCase()} ${p.request_id} by ${approver} · entry #${body.entry.index} — recorded in hash chain, no dispatch`);
+      const entry = { ...body.entry, recorded: true };
+      state.decisions[p.request_id] = entry;
+      state.log.push(entry);
+      renderAll();
     } catch {
-      errorBox.textContent = "server unreachable; decision NOT recorded";
+      errorBox.textContent = w("server unreachable; decision NOT recorded", "servidor inaccesible; la decisión NO quedó registrada");
     }
   }
 
-  function renderProposals(plan) {
+  function renderProposals() {
     const container = document.getElementById("proposals");
-    plan.proposals.forEach(p => {
+    container.innerHTML = "";
+    state.plan.proposals.forEach(p => {
       const card = document.createElement("article");
       const review = p.status !== "PROPOSED";
       card.className = "proposal" + (review ? " review" : "");
       const title = review
-        ? `${esc(p.request_id)} · NEEDS HUMAN REVIEW`
+        ? `${esc(p.request_id)} · ${statusText(p.status)}`
         : `${esc(p.resource_id)} &rarr; ${esc(p.request_id)} &rarr; ${esc(p.shelter_id)} · ${p.eta_minutes} min`;
       card.innerHTML = `<b>${title}</b>
-        <ul>${p.reasons.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
-        <div class="hash">audit ${esc(p.audit_hash)}</div>`;
+        <ul>${p.reasons.map(r => `<li>${esc(reasonText(r))}</li>`).join("")}</ul>
+        <div class="hash">${w("audit", "auditoría")} ${esc(p.audit_hash)}</div>`;
       if (!review) {
-        const existing = decisions[p.request_id];
-        if (existing && existing.proposal_audit_hash === p.audit_hash) {
-          markDecided(card, existing, true);
+        const existing = state.decisions[p.request_id];
+        if (existing && (!existing.recorded || existing.proposal_audit_hash === p.audit_hash)) {
+          const decided = document.createElement("div");
+          decided.className = "decided";
+          decided.textContent = decidedText(existing);
+          card.appendChild(decided);
         } else {
           const actions = document.createElement("div");
           actions.className = "actions";
           const errorBox = document.createElement("div");
           errorBox.className = "decided";
-          [["Approve", "ok", "approve"], ["Reject", "no", "reject"]].forEach(([label, cls, action]) => {
+          [[w("Approve", "Aprobar"), "ok", "approve"], [w("Reject", "Rechazar"), "no", "reject"]].forEach(([label, cls, action]) => {
             const button = document.createElement("button");
             button.textContent = label; button.className = cls;
-            button.addEventListener("click", () => submitDecision(p, action, card, actions, errorBox));
+            button.addEventListener("click", () => submitDecision(p, action, errorBox));
             actions.appendChild(button);
           });
           card.appendChild(actions);
@@ -245,35 +292,98 @@
     });
   }
 
-  function renderSimulation(sim) {
-    const box = document.getElementById("simulation");
-    const list = document.getElementById("simlist");
+  function renderFindings() {
+    const box = document.getElementById("findings");
+    const list = document.getElementById("findingslist");
+    const findings = state.plan.validation_findings;
+    if (!Array.isArray(findings) || !findings.length) { box.style.display = "none"; return; }
     box.style.display = "block";
-    sim.variants.forEach(v => {
+    list.innerHTML = "";
+    findings.forEach(f => {
+      const p = document.createElement("p");
+      p.style.margin = "5px 0";
+      p.innerHTML = `<b style="color:${f.severity === "warn" ? "#ff886d" : "#59c9de"}">${esc(f.code)}</b> ${esc(typeWord(f.entity_type))} ${esc(f.entity_id)} — ${esc(detailText(f.detail))}`;
+      list.appendChild(p);
+    });
+  }
+
+  function renderSimulation() {
+    const box = document.getElementById("simulation");
+    if (!state.sim) { box.style.display = "none"; return; }
+    box.style.display = "block";
+    const list = document.getElementById("simlist");
+    list.innerHTML = "";
+    state.sim.variants.forEach(v => {
       const card = document.createElement("div");
       card.style.cssText = "margin:9px 0;padding:9px;border-left:3px solid var(--water);background:rgba(89,201,222,.06);border-radius:0 7px 7px 0";
       const changed = v.diff.filter(d => d.changed);
       const lines = changed.length
         ? changed.map(d => {
             const before = d.base.status === "PROPOSED"
-              ? `PROPOSED (${esc(d.base.resource_id)}, ${d.base.eta_minutes} min)` : d.base.status;
+              ? `${statusText(d.base.status)} (${esc(d.base.resource_id)}, ${d.base.eta_minutes} min)` : statusText(d.base.status);
             const after = d.variant.status === "PROPOSED"
-              ? `PROPOSED (${esc(d.variant.resource_id)}, ${d.variant.eta_minutes} min)` : d.variant.status;
+              ? `${statusText(d.variant.status)} (${esc(d.variant.resource_id)}, ${d.variant.eta_minutes} min)` : statusText(d.variant.status);
             return `<p style="margin:3px 0">${esc(d.request_id)}: ${before} &rarr; <b>${after}</b></p>`;
           }).join("")
-        : `<p style="margin:3px 0;color:#5a7d8a">no plan change under these assumptions</p>`;
+        : `<p style="margin:3px 0;color:#b391a0">${w("no plan change under these assumptions", "sin cambios en el plan bajo estos supuestos")}</p>`;
       card.innerHTML = `<b style="font-size:.9rem">${esc(v.label)}</b>
         <ul style="margin:5px 0;padding-left:16px">${v.assumptions.map(a => `<li>${esc(a)}</li>`).join("")}</ul>
         ${lines}`;
       list.appendChild(card);
     });
-    document.getElementById("simlimits").textContent = (sim.limitations || []).join(" · ");
+    document.getElementById("simlimits").textContent = (state.sim.limitations || []).join(" · ");
+  }
+
+  function renderLog() {
+    const list = document.getElementById("loglist");
+    list.innerHTML = "";
+    if (!state.log.length) {
+      const p = document.createElement("p");
+      p.textContent = w("No local actions yet.", "Todavía no hay acciones locales.");
+      list.appendChild(p);
+      return;
+    }
+    state.log.forEach(e => {
+      const p = document.createElement("p");
+      p.textContent = e.recorded
+        ? `${e.recorded_at} · ${actionWord(e.action)} ${e.request_id} ${w("by", "por")} ${e.approver} · ${w("entry", "entrada")} #${e.index} — ${w("recorded in hash chain, no dispatch", "registrado en cadena de hash, sin despacho")}`
+        : `${e.ts} · ${actionWord(e.action)} ${e.request_id} ${w("by", "por")} ${e.approver} — ${w("LOCAL ONLY, no server", "SÓLO LOCAL, sin servidor")}`;
+      list.appendChild(p);
+    });
+  }
+
+  function renderSealinfo() {
+    if (!state.seal) return;
+    let chainNote = "";
+    if (state.chain && state.chain.ok) {
+      chainNote = ` · ${w("approvals chain OK", "cadena de aprobaciones OK")} (${state.chain.count} ${w("entries", "entradas")})`;
+    } else if (state.chain && !state.chain.ok) {
+      chainNote = ` · <b style="color:#ff886d">${w("APPROVALS CHAIN FAILED", "FALLÓ LA CADENA DE APROBACIONES")}: ${esc(state.chain.error)}</b>`;
+    } else {
+      chainNote = ` · ${w("no approvals server: decisions stay local and unrecorded", "sin servidor de aprobaciones: las decisiones quedan locales y sin registrar")}`;
+    }
+    document.getElementById("sealinfo").innerHTML =
+      `${w("plan seal", "sello del plan")} sha256 <code>${esc(state.seal.sha256)}</code> · ${w("scenario", "escenario")} <code>${esc(state.seal.scenario_sha256.slice(0, 16))}…</code>${chainNote}`;
+  }
+
+  function renderLegend() {
+    if (!state.legend) return;
+    state.legend.innerHTML = `<i style="background:#ff886d"></i>${w("request", "pedido")} &nbsp;<i style="background:#f2c76e"></i>${w("needs review / not usable", "revisión / no usable")} &nbsp;<i style="background:#3781d0"></i>${w("resource", "recurso")} &nbsp;<i style="background:#40ad7b"></i>${w("shelter", "refugio")}<br><span style="color:#59c9de">&#9476;&#9476;</span> ${w("usable route", "ruta usable")} &nbsp;<span style="color:#ff886d">&#9476;&#9476;</span> ${w("closed", "cerrada")} &nbsp;<span style="color:#f2c76e">&#9476;&#9476;</span> ${w("unverified / conflicting / stale", "no verificada / contradictoria / vieja")}`;
+  }
+
+  function renderAll() {
+    renderProposals();
+    renderFindings();
+    renderSimulation();
+    renderLog();
+    renderSealinfo();
+    renderLegend();
+    state.popupLayers.forEach(({ layer, props }) => layer.setPopupContent(popupFor(props)));
   }
 
   async function boot() {
-    let room, plan, seal;
     try {
-      [room, plan, seal] = await Promise.all([
+      [state.room, state.plan, state.seal] = await Promise.all([
         fetch("../out/room.geojson").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
         fetch("../out/plan.json").then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
         fetch("../out/plan.seal.json").then(r => r.ok ? r.json() : null),
@@ -291,78 +401,62 @@
     });
     tiles.once("tileerror", () => {
       notice.style.display = "block";
-      notice.textContent = root.dataset.language === "es"
-        ? "Mapa base no disponible (sin red). Las capas de datos del kernel siguen siendo autoritativas."
-        : "Basemap unavailable (offline). Kernel data layers remain authoritative.";
+      notice.textContent = w(
+        "Basemap unavailable (offline). Kernel data layers remain authoritative.",
+        "Mapa base no disponible (sin red). Las capas de datos del kernel siguen siendo autoritativas.");
     });
     tiles.addTo(map);
 
-    const routes = L.geoJSON(room, {
+    const track = (feature, layer) => {
+      layer.bindPopup(popupFor(feature.properties));
+      state.popupLayers.push({ layer, props: feature.properties });
+    };
+    const routes = L.geoJSON(state.room, {
       filter: f => f.properties.feature_type === "route",
       style: f => routeStyle(f.properties),
-      onEachFeature: (f, layer) => layer.bindPopup(popupFor(f.properties)),
+      onEachFeature: track,
     }).addTo(map);
-    const points = L.geoJSON(room, {
+    const points = L.geoJSON(state.room, {
       filter: f => f.properties.feature_type !== "route",
       pointToLayer: (f, latlng) => {
-        const t = f.properties.feature_type;
-        const gated = t === "request" && f.properties.status !== "PROPOSED";
+        const type = f.properties.feature_type;
+        const gated = type === "request" && f.properties.status !== "PROPOSED";
         return L.circleMarker(latlng, {
-          radius: t === "zone" ? 4 : 9,
-          color: gated ? "#f2c76e" : COLORS[t],
-          fillColor: gated ? "#f2c76e" : COLORS[t],
-          fillOpacity: t === "zone" ? 0.4 : 0.85, weight: 2,
+          radius: type === "zone" ? 4 : 9,
+          color: gated ? "#f2c76e" : COLORS[type],
+          fillColor: gated ? "#f2c76e" : COLORS[type],
+          fillOpacity: type === "zone" ? 0.4 : 0.85, weight: 2,
         });
       },
-      onEachFeature: (f, layer) => layer.bindPopup(popupFor(f.properties)),
+      onEachFeature: track,
     }).addTo(map);
     map.fitBounds(points.getBounds().extend(routes.getBounds()), { padding: [30, 30] });
 
-    const legend = document.createElement("div");
-    legend.className = "legend";
-    legend.innerHTML = `<i style="background:#ff886d"></i>request &nbsp;<i style="background:#f2c76e"></i>needs review / not usable &nbsp;<i style="background:#3781d0"></i>resource &nbsp;<i style="background:#40ad7b"></i>shelter<br><span style="color:#59c9de">&#9476;&#9476;</span> usable route &nbsp;<span style="color:#ff886d">&#9476;&#9476;</span> closed &nbsp;<span style="color:#f2c76e">&#9476;&#9476;</span> unverified / conflicting / stale`;
-    document.getElementById("map").appendChild(legend);
+    state.legend = document.createElement("div");
+    state.legend.className = "legend";
+    document.getElementById("map").appendChild(state.legend);
 
-    planSha = seal ? seal.sha256 : null;
-    let chainNote = "";
+    state.planSha = state.seal ? state.seal.sha256 : null;
     try {
       const response = await fetch("/api/approvals");
       if (response.ok) {
         const listing = await response.json();
-        apiMode = true;
-        listing.entries.filter(e => e.plan_sha256 === planSha).forEach(e => { decisions[e.request_id] = e; });
-        chainNote = listing.chain_ok
-          ? ` · approvals chain OK (${listing.entries.length} entries)`
-          : ` · <b style="color:#ff886d">APPROVALS CHAIN FAILED: ${esc(listing.chain_error)}</b>`;
-        Object.values(decisions).forEach(e => {
-          logLine(`${e.recorded_at} · ${e.action.toUpperCase()} ${e.request_id} by ${e.approver} · entry #${e.index} — recorded in hash chain`);
+        state.apiMode = true;
+        state.chain = { ok: listing.chain_ok, count: listing.entries.length, error: listing.chain_error };
+        listing.entries.filter(e => e.plan_sha256 === state.planSha).forEach(e => {
+          const entry = { ...e, recorded: true };
+          state.decisions[e.request_id] = entry;
+          state.log.push(entry);
         });
       }
     } catch { /* static serving: local-only mode */ }
-    if (!apiMode) {
-      chainNote = " · no approvals server: decisions stay local and unrecorded";
-    }
-
-    renderProposals(plan);
-    if (Array.isArray(plan.validation_findings) && plan.validation_findings.length) {
-      document.getElementById("findings").style.display = "block";
-      const list = document.getElementById("findingslist");
-      plan.validation_findings.forEach(f => {
-        const p = document.createElement("p");
-        p.style.margin = "5px 0";
-        p.innerHTML = `<b style="color:${f.severity === "warn" ? "#ff886d" : "#59c9de"}">${esc(f.code)}</b> ${esc(f.entity_type)} ${esc(f.entity_id)} — ${esc(f.detail)}`;
-        list.appendChild(p);
-      });
-    }
-    if (seal) {
-      document.getElementById("sealinfo").innerHTML =
-        `plan seal sha256 <code>${esc(seal.sha256)}</code> · scenario <code>${esc(seal.scenario_sha256.slice(0, 16))}…</code>${chainNote}`;
-    }
 
     try {
       const response = await fetch("../out/simulation.json");
-      if (response.ok) renderSimulation(await response.json());
+      if (response.ok) state.sim = await response.json();
     } catch { /* no simulation exported */ }
+
+    renderAll();
   }
 
   setLanguage("en");
