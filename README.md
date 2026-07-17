@@ -39,11 +39,11 @@ resources, routes, requests, or advice.
 python3 -m pytest -q
 ```
 
-## Export a plan and view the incident room
+## Export a plan and run the incident room
 
 ```bash
 python3 -m lifeline plan scenarios/flood_v1.json --out out
-python3 -m http.server 8788 --bind 127.0.0.1
+python3 -m lifeline serve --out out
 ```
 
 Open `http://127.0.0.1:8788/web/room.html`. The room renders only what the
@@ -52,6 +52,20 @@ kernel exported: `out/room.geojson` (display layer, floats allowed),
 `out/plan.seal.json` (SHA-256 digest and scenario digest). If CRONOS is
 available locally, each run also records a planning trace in
 `out/trace.sqlite`; its absence only skips the trace.
+
+Approve/Reject decisions in the room are appended to
+`out/approvals.jsonl`, a hash-chained, append-only log bound to the exact
+plan seal and proposal audit hash (stale plans and duplicates are refused
+with 409). The server binds to loopback and has no authentication yet: the
+approver identity is declared, not verified. Verify everything offline with:
+
+```bash
+python3 -m lifeline verify --out out
+```
+
+This recomputes the plan seal and checks the approvals chain; altered,
+inserted, reordered, or dropped interior entries fail verification. Tail
+truncation is only detectable once an external anchor exists (roadmap).
 
 The landing page remains at `http://127.0.0.1:8788/web/` with illustrative
 content. See `docs/adr/0001-map-stack.md` for the map stack decision and the
