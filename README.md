@@ -39,14 +39,23 @@ resources, routes, requests, or advice.
 python3 -m pytest -q
 ```
 
-## View the incident room
+## Export a plan and view the incident room
 
 ```bash
-cd web
+python3 -m lifeline plan scenarios/flood_v1.json --out out
 python3 -m http.server 8788 --bind 127.0.0.1
 ```
 
-Open `http://127.0.0.1:8788`.
+Open `http://127.0.0.1:8788/web/room.html`. The room renders only what the
+kernel exported: `out/room.geojson` (display layer, floats allowed),
+`out/plan.json` (sealed decision artifact, no floats), and
+`out/plan.seal.json` (SHA-256 digest and scenario digest). If CRONOS is
+available locally, each run also records a planning trace in
+`out/trace.sqlite`; its absence only skips the trace.
+
+The landing page remains at `http://127.0.0.1:8788/web/` with illustrative
+content. See `docs/adr/0001-map-stack.md` for the map stack decision and the
+float boundary.
 
 ## Roadmap
 
