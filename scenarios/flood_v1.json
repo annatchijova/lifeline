@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "scenario_id": "flood-v1-synthetic",
+  "zones": [
+    {"zone_id": "boat-base", "name": "Boat base", "kind": "base", "display": {"lon": -60.712, "lat": -32.951}},
+    {"zone_id": "ambulance-base", "name": "Ambulance base", "kind": "base", "display": {"lon": -60.685, "lat": -32.930}},
+    {"zone_id": "north-bank", "name": "North bank", "kind": "bank", "display": {"lon": -60.700, "lat": -32.925}},
+    {"zone_id": "east-bank", "name": "East bank", "kind": "bank", "display": {"lon": -60.678, "lat": -32.944}},
+    {"zone_id": "south-bank", "name": "South bank", "kind": "bank", "display": {"lon": -60.705, "lat": -32.965}},
+    {"zone_id": "shelter-a", "name": "Shelter A site", "kind": "shelter-site", "display": {"lon": -60.690, "lat": -32.938}},
+    {"zone_id": "shelter-b", "name": "Shelter B site", "kind": "shelter-site", "display": {"lon": -60.720, "lat": -32.940}}
+  ],
+  "requests": [
+    {
+      "request_id": "family-north", "people": 4, "urgency": 5, "medical_need": false,
+      "pickup_zone": "north-bank", "destination_zone": "shelter-a",
+      "source": "operator-07", "source_type": "verified_operator",
+      "observed_at": "2026-07-17T09:12:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "request_id": "family-east", "people": 3, "urgency": 4, "medical_need": true,
+      "pickup_zone": "east-bank", "destination_zone": "shelter-a",
+      "source": "operator-03", "source_type": "verified_operator",
+      "observed_at": "2026-07-17T09:05:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "request_id": "family-south", "people": 6, "urgency": 5, "medical_need": false,
+      "pickup_zone": "south-bank", "destination_zone": "shelter-a",
+      "source": "radio-listener", "source_type": "unverified_public",
+      "observed_at": "2026-07-17T08:40:00Z", "verification_state": "unverified", "freshness": "medium"
+    },
+    {
+      "request_id": "group-riverside", "people": 2, "urgency": 3, "medical_need": false,
+      "pickup_zone": "east-bank", "destination_zone": "shelter-b",
+      "source": "social-media", "source_type": "unverified_public",
+      "observed_at": "2026-07-17T07:55:00Z", "verification_state": "conflicting", "freshness": "low"
+    }
+  ],
+  "resources": [
+    {
+      "resource_id": "boat-02", "kind": "boat", "capacity": 5, "available": true,
+      "can_transport_medical": false, "zone": "boat-base",
+      "source": "fleet-registry", "source_type": "institutional",
+      "observed_at": "2026-07-17T09:00:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "resource_id": "ambulance-01", "kind": "ambulance", "capacity": 3, "available": true,
+      "can_transport_medical": true, "zone": "ambulance-base",
+      "source": "fleet-registry", "source_type": "institutional",
+      "observed_at": "2026-07-17T09:00:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "resource_id": "truck-01", "kind": "truck", "capacity": 8, "available": false,
+      "can_transport_medical": false, "zone": "ambulance-base",
+      "source": "fleet-registry", "source_type": "institutional",
+      "observed_at": "2026-07-17T08:30:00Z", "verification_state": "verified", "freshness": "medium"
+    }
+  ],
+  "shelters": [
+    {
+      "shelter_id": "shelter-a", "zone": "shelter-a", "beds_open": 12, "open": true,
+      "source": "shelter-manager-a", "source_type": "institutional",
+      "observed_at": "2026-07-17T09:10:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "shelter_id": "shelter-b", "zone": "shelter-b", "beds_open": 4, "open": true,
+      "source": "shelter-manager-b", "source_type": "institutional",
+      "observed_at": "2026-07-17T08:20:00Z", "verification_state": "verified", "freshness": "medium"
+    }
+  ],
+  "routes": [
+    {
+      "origin": "boat-base", "destination": "north-bank", "eta_minutes": 11, "open": true,
+      "source": "drone-sweep-2", "source_type": "sensor",
+      "observed_at": "2026-07-17T09:08:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "origin": "north-bank", "destination": "shelter-a", "eta_minutes": 8, "open": true,
+      "source": "drone-sweep-2", "source_type": "sensor",
+      "observed_at": "2026-07-17T09:08:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "origin": "ambulance-base", "destination": "east-bank", "eta_minutes": 9, "open": true,
+      "source": "patrol-11", "source_type": "responder",
+      "observed_at": "2026-07-17T09:02:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "origin": "east-bank", "destination": "shelter-a", "eta_minutes": 12, "open": true,
+      "source": "patrol-11", "source_type": "responder",
+      "observed_at": "2026-07-17T09:02:00Z", "verification_state": "verified", "freshness": "high"
+    },
+    {
+      "origin": "boat-base", "destination": "south-bank", "eta_minutes": 14, "open": false,
+      "source": "patrol-04", "source_type": "responder",
+      "observed_at": "2026-07-17T08:50:00Z", "verification_state": "verified", "freshness": "medium"
+    },
+    {
+      "origin": "south-bank", "destination": "shelter-a", "eta_minutes": 10, "open": true,
+      "source": "radio-listener", "source_type": "unverified_public",
+      "observed_at": "2026-07-17T08:35:00Z", "verification_state": "unverified", "freshness": "low"
+    },
+    {
+      "origin": "east-bank", "destination": "shelter-b", "eta_minutes": 9, "open": true,
+      "source": "two contradictory reports", "source_type": "mixed",
+      "observed_at": "2026-07-17T08:15:00Z", "verification_state": "conflicting", "freshness": "low"
+    },
+    {
+      "origin": "boat-base", "destination": "east-bank", "eta_minutes": 30, "open": false,
+      "source": "drone-sweep-1", "source_type": "sensor",
+      "observed_at": "2026-07-17T08:00:00Z", "verification_state": "verified", "freshness": "medium"
+    }
+  ]
+}
