@@ -305,6 +305,7 @@ def test_web_static_files_reject_symlinks_for_get_and_head(room, tmp_path):
     root = tmp_path / "synthetic-root"
     web = root / "web"
     web.mkdir(parents=True)
+    (root / "private.txt").write_text("LIFELINE_ENCODED_TRAVERSAL_SYNTHETIC_SECRET", encoding="utf-8")
     target = tmp_path / "synthetic-server-readable.txt"
     target.write_text("LIFELINE_WEB_SYMLINK_SYNTHETIC_SECRET", encoding="utf-8")
     os.symlink(target, web / "linked.txt")
@@ -321,6 +322,8 @@ def test_web_static_files_reject_symlinks_for_get_and_head(room, tmp_path):
         assert _head(base, "/web/linked.txt") == 404
         assert _get(base, "/web/linked-dir/nested-secret.txt")[0] == 404
         assert _head(base, "/web/linked-dir/nested-secret.txt") == 404
+        assert _get(base, "/web/%2e%2e/private.txt")[0] == 404
+        assert _head(base, "/web/%2e%2e/private.txt") == 404
     finally:
         server.shutdown()
         server.server_close()
