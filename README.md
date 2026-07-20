@@ -146,6 +146,13 @@ LIFELINE is released under the [Apache License 2.0](LICENSE). See
 human-led, Codex-assisted development workflow is documented in
 [`docs/CODEX_COLLABORATION.md`](docs/CODEX_COLLABORATION.md).
 
+For hackathon applications and judge questions, see the
+[`Judges' Submission Guide`](docs/JUDGES_SUBMISSION.md). It collects the
+problem statement, product framing, demo claims, technical evidence, common
+answers, and the explicit boundary that the project uses synthetic data and
+has not been used in real incidents. The deeper architecture, verification,
+export, and adversarial-audit documents are linked there as well.
+
 ## Export a plan and run the incident room
 
 ```bash
