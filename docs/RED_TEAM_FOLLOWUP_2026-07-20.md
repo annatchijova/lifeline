@@ -108,3 +108,34 @@ body is read. A caller that already has a valid role token can still be a slow
 client, because this stdlib prototype intentionally has no global connection
 quota or request-read deadline. That is a separate local hardening question,
 not evidence that RT-07 remains bypassable.
+
+## RT-08 — Static web serving follows symlinks outside the web root
+
+**Severity:** Medium, conditional
+
+**Epistemic level:** CONFIRMED BY INDUCTION
+
+**Bucket:** Software vulnerability
+
+### Threat-model precondition
+
+The attacker can introduce a symlink into the static `web/` tree but cannot
+directly read its target. This can arise from a less-trusted static-asset write
+path or an unreviewed checkout artifact. It is not a claim that an attacker
+who can arbitrarily modify Python source needs this vector.
+
+### Code fact, deduction, and induction
+
+At the vulnerable base, `/web/...` delegated to
+`SimpleHTTPRequestHandler`, which follows filesystem symlinks. A temporary
+web tree containing `linked.txt -> server-readable-synthetic-secret.txt` was
+served through the real loopback endpoint. The observed response was `HTTP
+200` with the synthetic secret bytes.
+
+### Fix and regression
+
+Static web files now open component-by-component relative to a descriptor for
+the trusted `web/` directory. Every directory component and the final file use
+`O_NOFOLLOW`; the final descriptor must also be a regular file. GET and HEAD
+of the synthetic symlink now return `404`, while normal bundled static assets
+continue to load.

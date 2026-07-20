@@ -141,19 +141,56 @@ class RoomHandler(SimpleHTTPRequestHandler):
             return None
         return descriptor, info
 
-    def _serve_public_artifact(self, artifact: str, *, head_only: bool) -> None:
-        opened = self._open_public_artifact(artifact)
+    def _open_web_file(self, clean: str) -> tuple[int, os.stat_result] | None:
+        """Open a static web file without following a symlink at any depth."""
+        relative = unquote(clean[len("/web/"):])
+        parts = tuple(relative.split("/"))
+        if not parts or any(part in {"", ".", ".."} for part in parts):
+            return None
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        file_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        directory_fd: int | None = None
+        try:
+            directory_fd = os.open(self.server.root_dir / "web", directory_flags)
+            for part in parts[:-1]:
+                child_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+                os.close(directory_fd)
+                directory_fd = child_fd
+            descriptor = os.open(parts[-1], file_flags, dir_fd=directory_fd)
+        except OSError:
+            return None
+        finally:
+            if directory_fd is not None:
+                os.close(directory_fd)
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            os.close(descriptor)
+            return None
+        return descriptor, info
+
+    def _serve_open_file(
+        self, opened: tuple[int, os.stat_result] | None, display_path: Path, *, head_only: bool,
+    ) -> None:
         if opened is None:
-            self.send_error(404, "artifact is not publicly served")
+            self.send_error(404, "file is not publicly served")
             return
         descriptor, info = opened
         with os.fdopen(descriptor, "rb") as source:
             self.send_response(200)
-            self.send_header("Content-Type", self.guess_type(str(self.server.out_dir / artifact)))
+            self.send_header("Content-Type", self.guess_type(str(display_path)))
             self.send_header("Content-Length", str(info.st_size))
             self.end_headers()
             if not head_only:
                 self.copyfile(source, self.wfile)
+
+    def _serve_public_artifact(self, artifact: str, *, head_only: bool) -> None:
+        self._serve_open_file(
+            self._open_public_artifact(artifact), self.server.out_dir / artifact, head_only=head_only)
+
+    def _serve_web_file(self, clean: str, *, head_only: bool) -> None:
+        relative = unquote(clean[len("/web/"):])
+        self._serve_open_file(
+            self._open_web_file(clean), self.server.root_dir / "web" / relative, head_only=head_only)
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -218,8 +255,8 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             self._serve_public_artifact(artifact, head_only=False)
             return
-        if clean == "/web" or clean.startswith("/web/"):
-            super().do_GET()
+        if clean.startswith("/web/"):
+            self._serve_web_file(clean, head_only=False)
             return
         self.send_error(404, "only /web/, selected /out/ artifacts, and /api/ are served")
 
@@ -232,8 +269,8 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             self._serve_public_artifact(artifact, head_only=True)
             return
-        if clean == "/web" or clean.startswith("/web/"):
-            super().do_HEAD()
+        if clean.startswith("/web/"):
+            self._serve_web_file(clean, head_only=True)
             return
         self.send_error(404, "only /web/ and selected /out/ artifacts are served")
 

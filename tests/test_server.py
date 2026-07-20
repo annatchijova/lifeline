@@ -300,6 +300,26 @@ def test_public_artifacts_reject_fifos_without_blocking(room):
     assert _head(base, "/out/plan.json") == 404
 
 
+def test_web_static_files_reject_symlinks_for_get_and_head(room, tmp_path):
+    _, _, _, out_dir, _ = room
+    root = tmp_path / "synthetic-root"
+    web = root / "web"
+    web.mkdir(parents=True)
+    target = tmp_path / "synthetic-server-readable.txt"
+    target.write_text("LIFELINE_WEB_SYMLINK_SYNTHETIC_SECRET", encoding="utf-8")
+    os.symlink(target, web / "linked.txt")
+    server = make_server(root, out_dir, port=0)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{server.server_address[1]}"
+    try:
+        assert _get(base, "/web/linked.txt")[0] == 404
+        assert _head(base, "/web/linked.txt") == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
 def test_serve_describes_the_actual_local_authentication_boundary(monkeypatch, capsys, tmp_path):
     class FakeServer:
         approvals_path = tmp_path / "approvals.jsonl"
