@@ -173,6 +173,36 @@ def test_unauthenticated_incident_report_is_rejected_before_reading_its_body(roo
     assert b"a bearer token is required" in response
 
 
+def test_authenticated_incomplete_body_times_out_instead_of_holding_a_handler(tmp_path):
+    out_dir = tmp_path / "out"
+    export_plan(SCENARIO_PATH, out_dir)
+    _, token = OperatorStore(out_dir / "operators.sqlite3").bootstrap("timeout-auditor")
+    server = make_server(REPO, out_dir, port=0)
+    server.request_timeout_seconds = 0.1
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    port = server.server_address[1]
+    request = (
+        "POST /api/approvals HTTP/1.1\r\n"
+        f"Host: 127.0.0.1:{port}\r\n"
+        f"Authorization: Bearer {token}\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: 2\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii")
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
+            client.settimeout(0.5)
+            client.sendall(request)
+            response = _receive_all(client)
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    assert response.startswith(b"HTTP/1.0 408")
+    assert b"request body timed out" in response
+
+
 def test_rejects_stale_plan_and_stale_proposal(room):
     base, plan, seal, _, token = room
     proposal = _proposed(plan)

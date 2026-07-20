@@ -139,3 +139,38 @@ the trusted `web/` directory. Every directory component and the final file use
 `O_NOFOLLOW`; the final descriptor must also be a regular file. GET and HEAD
 of the synthetic symlink now return `404`, while normal bundled static assets
 continue to load.
+
+## RT-09 — Authenticated incomplete bodies have no read deadline
+
+**Severity:** Low
+
+**Epistemic level:** CONFIRMED BY INDUCTION
+
+**Bucket:** Software vulnerability (local availability)
+
+### Threat-model precondition
+
+The caller holds a valid local role token. This is not an unauthenticated
+remote slow-client claim; RT-07 already closes the pre-auth variant for
+incident subroutes.
+
+### Code fact, deduction, and induction
+
+The stdlib `ThreadingHTTPServer` had no socket read timeout. After a valid
+token passed authorization, `_json_body()` could block in `rfile.read(length)`
+for a declared but never delivered body. A real coordinator-token socket test
+with `Content-Length: 2` and no body timed out at the client, confirming that
+the handler had no deadline.
+
+### Fix and regression
+
+Each handler connection now receives a five-second read timeout. A timed-out
+body becomes an explicit `408 request body timed out`. The regression lowers
+that timeout to 0.1 seconds and verifies the response on the actual server.
+
+## Scope note after RT-09
+
+A per-connection deadline bounds how long one incomplete request holds one
+handler. It does not impose a global connection quota, rate limit, or
+production reverse-proxy policy. Those are deployment hardening concerns
+outside this local prototype's current authority model.

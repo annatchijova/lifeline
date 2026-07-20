@@ -41,6 +41,7 @@ from lifeline.incidents import IncidentConflict, IncidentNotFound, IncidentStore
 
 MAX_BODY_BYTES = 8192
 MAX_FIELD_LENGTH = 200
+REQUEST_TIMEOUT_SECONDS = 5.0
 PUBLIC_ARTIFACTS = frozenset({
     "plan.json", "plan.seal.json", "verification.json", "verification.seal.json", "room.geojson",
     "simulation.json", "simulation.seal.json",
@@ -83,6 +84,10 @@ class RoomHandler(SimpleHTTPRequestHandler):
     def __init__(self, request, client_address, server, **kwargs):
         super().__init__(request, client_address, server, directory=str(server.root_dir), **kwargs)
 
+    def setup(self):
+        self.request.settimeout(self.server.request_timeout_seconds)
+        super().setup()
+
     def log_message(self, format, *args):  # quieter default
         pass
 
@@ -100,6 +105,8 @@ class RoomHandler(SimpleHTTPRequestHandler):
             raise ApiError(413, "body too large")
         try:
             value = json.loads(self.rfile.read(length).decode("utf-8"))
+        except TimeoutError:
+            raise ApiError(408, "request body timed out")
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise ApiError(400, "body must be valid JSON")
         if not isinstance(value, dict):
@@ -471,6 +478,7 @@ def make_server(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.
     server.out_dir = Path(out_dir).resolve()
     server.approvals_path = server.out_dir / "approvals.jsonl"
     server.approvals_lock = threading.Lock()
+    server.request_timeout_seconds = REQUEST_TIMEOUT_SECONDS
     server.incidents = IncidentStore(server.out_dir / "incidents.sqlite3")
     server.operators = OperatorStore(server.out_dir / "operators.sqlite3")
     return server
