@@ -116,6 +116,14 @@ class IncidentStore:
                     UNIQUE (event_hash)
                 )
             """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS incident_approval_claims (
+                    incident_id TEXT NOT NULL,
+                    request_id TEXT NOT NULL,
+                    plan_sha256 TEXT NOT NULL,
+                    PRIMARY KEY (incident_id, request_id, plan_sha256)
+                )
+            """)
 
     def _snapshot(self, conn: sqlite3.Connection, incident_id: str) -> IncidentSnapshot:
         row = conn.execute(
@@ -398,9 +406,8 @@ class IncidentStore:
             ).fetchall()
         return [{**dict(row), "payload": json.loads(row["payload_json"])} for row in rows]
 
-    def plan(self, incident_id: str, reference_time: str | None = None) -> dict:
-        with self._connect() as conn:
-            snapshot = self._verified_snapshot(conn, incident_id)
+    def _plan_from_snapshot(self, snapshot: IncidentSnapshot, reference_time: str | None) -> dict:
+        """Build a sealed plan from an already verified snapshot."""
         try:
             scenario, findings = validate_scenario(parse_scenario(snapshot.scenario), reference_time)
         except ScenarioError as error:
@@ -415,7 +422,7 @@ class IncidentStore:
         verification["incident_revision"] = snapshot.revision
         verification["incident_scenario_sha256"] = snapshot.scenario_sha256
         return {
-            "incident_id": incident_id,
+            "incident_id": snapshot.incident_id,
             "revision": snapshot.revision,
             "scenario_sha256": snapshot.scenario_sha256,
             "plan": payload,
@@ -431,6 +438,11 @@ class IncidentStore:
             },
         }
 
+    def plan(self, incident_id: str, reference_time: str | None = None) -> dict:
+        with self._connect() as conn:
+            snapshot = self._verified_snapshot(conn, incident_id)
+        return self._plan_from_snapshot(snapshot, reference_time)
+
     def record_approval(
         self,
         incident_id: str,
@@ -444,24 +456,44 @@ class IncidentStore:
     ) -> dict:
         if action not in ACTIONS:
             raise IncidentStoreError(f"action must be one of {list(ACTIONS)}")
-        plan = self.plan(incident_id, reference_time)
-        if plan["seal"]["sha256"] != plan_sha256:
-            raise IncidentConflict("stale incident plan: revision, evidence, or reference time changed; recompute before deciding")
-        proposal = next((item for item in plan["plan"]["proposals"] if item["request_id"] == request_id), None)
-        if proposal is None:
-            raise IncidentConflict("unknown request_id for the current incident plan")
-        if proposal["status"] != "PROPOSED":
-            raise IncidentConflict("only PROPOSED items accept an approval decision")
-        if proposal["audit_hash"] != proposal_audit_hash:
-            raise IncidentConflict("stale proposal: audit hash does not match the current incident plan")
-        try:
-            entries = self.approvals(incident_id)
+        # The durable claim and the JSONL append share one SQLite write
+        # transaction. BEGIN IMMEDIATE serializes concurrent local processes,
+        # so no second caller can pass the duplicate check while this decision
+        # is being sealed into its human-readable hash chain.
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            snapshot = self._verified_snapshot(conn, incident_id)
+            plan = self._plan_from_snapshot(snapshot, reference_time)
+            if plan["seal"]["sha256"] != plan_sha256:
+                raise IncidentConflict("stale incident plan: revision, evidence, or reference time changed; recompute before deciding")
+            proposal = next((item for item in plan["plan"]["proposals"] if item["request_id"] == request_id), None)
+            if proposal is None:
+                raise IncidentConflict("unknown request_id for the current incident plan")
+            if proposal["status"] != "PROPOSED":
+                raise IncidentConflict("only PROPOSED items accept an approval decision")
+            if proposal["audit_hash"] != proposal_audit_hash:
+                raise IncidentConflict("stale proposal: audit hash does not match the current incident plan")
+            try:
+                entries = read_entries(self._approval_path(incident_id))
+                verify_chain(entries)
+            except ApprovalChainError as error:
+                raise IncidentStoreError(
+                    f"incident '{incident_id}' approvals chain failed verification: {error}") from error
             if any(entry["request_id"] == request_id and entry["plan_sha256"] == plan_sha256 for entry in entries):
                 raise IncidentConflict("a decision for this proposal is already recorded")
-            return append_entry(
-                self._approval_path(incident_id), request_id=request_id, action=action,
-                approver=approver, proposal_audit_hash=proposal_audit_hash,
-                plan_sha256=plan_sha256, recorded_at=_utc_now(),
-            )
-        except ApprovalChainError as error:
-            raise IncidentStoreError(f"incident '{incident_id}' approvals chain failed verification: {error}") from error
+            try:
+                conn.execute(
+                    "INSERT INTO incident_approval_claims VALUES (?, ?, ?)",
+                    (incident_id, request_id, plan_sha256),
+                )
+            except sqlite3.IntegrityError as error:
+                raise IncidentConflict("a decision for this proposal is already recorded") from error
+            try:
+                return append_entry(
+                    self._approval_path(incident_id), request_id=request_id, action=action,
+                    approver=approver, proposal_audit_hash=proposal_audit_hash,
+                    plan_sha256=plan_sha256, recorded_at=_utc_now(),
+                )
+            except ApprovalChainError as error:
+                raise IncidentStoreError(
+                    f"incident '{incident_id}' approvals chain failed verification: {error}") from error
