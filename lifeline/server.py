@@ -39,7 +39,10 @@ from lifeline.incidents import IncidentConflict, IncidentNotFound, IncidentStore
 
 MAX_BODY_BYTES = 8192
 MAX_FIELD_LENGTH = 200
-PUBLIC_ARTIFACTS = frozenset({"plan.json", "plan.seal.json", "room.geojson", "simulation.json", "simulation.seal.json"})
+PUBLIC_ARTIFACTS = frozenset({
+    "plan.json", "plan.seal.json", "verification.json", "verification.seal.json", "room.geojson",
+    "simulation.json", "simulation.seal.json",
+})
 
 
 class ApiError(Exception):

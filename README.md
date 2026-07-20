@@ -106,8 +106,10 @@ proposal.
 
 Open `http://127.0.0.1:8788/web/room.html?mode=live`. The live room renders only what the
 kernel exported: `out/room.geojson` (display layer, floats allowed),
-`out/plan.json` (sealed decision artifact, no floats), and
-`out/plan.seal.json` (SHA-256 digest and scenario digest). If CRONOS is
+`out/plan.json` (sealed decision artifact, no floats),
+`out/plan.seal.json` (SHA-256 digest and scenario digest), and
+`out/verification.json` (the non-authoritative, sealed evidence-gap artifact
+bound to that exact plan). If CRONOS is
 available locally, each run also records a planning trace in
 `out/trace.sqlite`; its absence only skips the trace.
 
@@ -126,7 +128,7 @@ client-supplied name. Verify everything offline with:
 python3 -m lifeline verify --out out
 ```
 
-This recomputes the plan seal, checks the approvals chain, and—when local
+This recomputes the plan and verification seals, checks their binding, checks the approvals chain, and—when local
 incidents exist—checks every incident snapshot against the tip of its
 hash-linked event ledger. Altered, inserted, reordered, or dropped interior
 entries fail verification. Tail truncation is only detectable once an external
@@ -203,6 +205,9 @@ Plans produced from a persisted incident have their own approval ledger. The
 plan includes the incident revision and scenario digest inside its seal; a
 coordinator can only record a decision against that exact plan. If a report,
 correction, or reference time changes, the old plan hash is rejected as stale.
+The persisted-plan endpoint returns the same non-authoritative verification
+artifact and independent seal as the CLI export, bound to that exact incident
+revision and plan hash.
 
 ```bash
 curl -X POST http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/approvals \
@@ -256,6 +261,8 @@ cannot write approval records or dispatch anything.
 3. Per-organization identity integration, approval policy, and offline synchronization.
 4. Optional model narration outside the planning authority boundary.
 
-See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md) and
-[LIFELINE OS (Español)](docs/LIFELINE_OS.md) for the product architecture,
-ethical boundaries, simulation model, and the research patterns that inform it.
+See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md),
+[LIFELINE OS (Español)](docs/LIFELINE_OS.md), and the
+[verification artifact contract](docs/VERIFICATION_ARTIFACT.md) for the
+product architecture, ethical boundaries, simulation model, and the research
+patterns that inform it.

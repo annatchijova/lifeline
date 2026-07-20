@@ -4,6 +4,11 @@ These artifacts are a sealed, synthetic flood scenario included so every clone
 opens with a working incident-room experience. They are not live operational
 data and must never be treated as one.
 
+`verification.json` is a separately sealed, non-authoritative evidence-gap
+artifact bound to the exact `plan.json` hash. It names evidence that blocks a
+proposal and the verification artifact a human would need before recomputing
+the plan; it never ranks people or authorizes a dispatch.
+
 They were generated from the versioned scenario and declared what-if variants:
 
 ```bash

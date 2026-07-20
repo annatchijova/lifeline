@@ -1,0 +1,257 @@
+{
+  "limitations": [
+    "This artifact names evidence gaps and human verification work; it is not a priority score or dispatch authority.",
+    "A required artifact allows a plan to be recomputed after human verification; it does not guarantee a feasible proposal.",
+    "Only reports represented in the scenario are analyzed. Unreported conditions remain outside this artifact's evidence boundary."
+  ],
+  "nodes": [
+    {
+      "action_required": "HUMAN_APPROVAL_REQUIRED",
+      "detail": "The deterministic evidence gates required for this proposal were satisfied.",
+      "disposition": "CLEAR",
+      "proposal_status": "PROPOSED",
+      "reason_code": "EVIDENCE_GATES_CLEAR",
+      "refutes": [],
+      "request_id": "family-east",
+      "required_artifacts": [],
+      "supports": [
+        {
+          "entity_id": "family-east",
+          "entity_type": "request",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:05:00Z",
+          "source": "operator-03",
+          "source_type": "verified_operator",
+          "verification_state": "verified"
+        },
+        {
+          "entity_id": "ambulance-01",
+          "entity_type": "resource",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:00:00Z",
+          "source": "fleet-registry",
+          "source_type": "institutional",
+          "verification_state": "verified"
+        },
+        {
+          "entity_id": "shelter-a",
+          "entity_type": "shelter",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:10:00Z",
+          "source": "shelter-manager-a",
+          "source_type": "institutional",
+          "verification_state": "verified"
+        },
+        {
+          "entity_id": "ambulance-base->east-bank",
+          "entity_type": "route",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:02:00Z",
+          "source": "patrol-11",
+          "source_type": "responder",
+          "verification_state": "verified"
+        },
+        {
+          "entity_id": "east-bank->shelter-a",
+          "entity_type": "route",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:02:00Z",
+          "source": "patrol-11",
+          "source_type": "responder",
+          "verification_state": "verified"
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "action_required": "HUMAN_APPROVAL_REQUIRED",
+      "detail": "The deterministic evidence gates required for this proposal were satisfied.",
+      "disposition": "CLEAR",
+      "proposal_status": "PROPOSED",
+      "reason_code": "EVIDENCE_GATES_CLEAR",
+      "refutes": [],
+      "request_id": "family-north",
+      "required_artifacts": [],
+      "supports": [
+        {
+          "entity_id": "family-north",
+          "entity_type": "request",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:12:00Z",
+          "source": "operator-07",
+          "source_type": "verified_operator",
+          "verification_state": "verified"
+        },
+        {
+          "entity_id": "boat-02",
+          "entity_type": "resource",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:00:00Z",
+          "source": "fleet-registry",
+          "source_type": "institutional",
+          "verification_state": "verified"
+        },
+        {
+          "entity_id": "shelter-a",
+          "entity_type": "shelter",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:10:00Z",
+          "source": "shelter-manager-a",
+          "source_type": "institutional",
+          "verification_state": "verified"
+        },
+        {
+          "entity_id": "boat-base->north-bank",
+          "entity_type": "route",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:08:00Z",
+          "source": "drone-sweep-2",
+          "source_type": "sensor",
+          "verification_state": "verified"
+        },
+        {
+          "entity_id": "north-bank->shelter-a",
+          "entity_type": "route",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T09:08:00Z",
+          "source": "drone-sweep-2",
+          "source_type": "sensor",
+          "verification_state": "verified"
+        }
+      ],
+      "unresolved": []
+    },
+    {
+      "action_required": "VERIFY_REQUEST_REPORT",
+      "detail": "The request report is not verified, so it cannot support a deterministic proposal.",
+      "disposition": "BLOCKED",
+      "proposal_status": "NEEDS_HUMAN_REVIEW",
+      "reason_code": "REQUEST_UNVERIFIED",
+      "refutes": [],
+      "request_id": "family-south",
+      "required_artifacts": [
+        "authorized_request_confirmation"
+      ],
+      "supports": [
+        {
+          "entity_id": "family-south",
+          "entity_type": "request",
+          "freshness": "medium",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T08:40:00Z",
+          "source": "radio-listener",
+          "source_type": "unverified_public",
+          "verification_state": "unverified"
+        }
+      ],
+      "unresolved": [
+        "The reported request remains unverified."
+      ]
+    },
+    {
+      "action_required": "OBTAIN_DISCRIMINATING_EVIDENCE",
+      "detail": "The request report is marked conflicting, so it cannot support a deterministic proposal.",
+      "disposition": "BLOCKED",
+      "proposal_status": "NEEDS_HUMAN_REVIEW",
+      "reason_code": "REQUEST_CONTRADICTION",
+      "refutes": [],
+      "request_id": "group-riverside",
+      "required_artifacts": [
+        "independent_authorized_request_confirmation"
+      ],
+      "supports": [
+        {
+          "entity_id": "group-riverside",
+          "entity_type": "request",
+          "freshness": "low",
+          "observation": "ANALYZED",
+          "observed_at": "2026-07-17T07:55:00Z",
+          "source": "social-media",
+          "source_type": "unverified_public",
+          "verification_state": "conflicting"
+        }
+      ],
+      "unresolved": [
+        "The competing reports are not resolved by this plan."
+      ]
+    }
+  ],
+  "plan_sha256": "4282ba2fb5153cb2480ce5b19d3b55a4a78204c8932fb8d7cff97871a8c0cba7",
+  "scenario_id": "flood-v1-synthetic",
+  "validation_findings": [
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 115 minutes old; downgraded to 'medium'",
+      "entity_id": "family-east",
+      "entity_type": "request",
+      "severity": "warn"
+    },
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 108 minutes old; downgraded to 'medium'",
+      "entity_id": "family-north",
+      "entity_type": "request",
+      "severity": "warn"
+    },
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+      "entity_id": "ambulance-01",
+      "entity_type": "resource",
+      "severity": "warn"
+    },
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 120 minutes old; downgraded to 'medium'",
+      "entity_id": "boat-02",
+      "entity_type": "resource",
+      "severity": "warn"
+    },
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+      "entity_id": "ambulance-base->east-bank",
+      "entity_type": "route",
+      "severity": "warn"
+    },
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+      "entity_id": "boat-base->north-bank",
+      "entity_type": "route",
+      "severity": "warn"
+    },
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 118 minutes old; downgraded to 'medium'",
+      "entity_id": "east-bank->shelter-a",
+      "entity_type": "route",
+      "severity": "warn"
+    },
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 112 minutes old; downgraded to 'medium'",
+      "entity_id": "north-bank->shelter-a",
+      "entity_type": "route",
+      "severity": "warn"
+    },
+    {
+      "code": "STALE_REPORT",
+      "detail": "declared freshness 'high' but report is 110 minutes old; downgraded to 'medium'",
+      "entity_id": "shelter-a",
+      "entity_type": "shelter",
+      "severity": "warn"
+    }
+  ],
+  "verification_version": 1
+}

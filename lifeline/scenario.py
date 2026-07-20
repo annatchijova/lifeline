@@ -267,10 +267,15 @@ def plan_scenario(scenario: Scenario) -> list[DispatchProposal]:
     verified_requests: list[IncidentRequest] = []
     for reported in scenario.requests:
         state = reported.provenance.verification_state
-        if state == "verified":
+        if state == "verified" and reported.provenance.freshness != "low":
             verified_requests.append(reported.request)
             continue
-        reason = "unverified report" if state == "unverified" else "conflicting reports"
+        if state == "unverified":
+            reason = "unverified report"
+        elif state == "conflicting":
+            reason = "conflicting reports"
+        else:
+            reason = "stale report"
         reasons = (f"urgency={reported.request.urgency}", f"people={reported.request.people}", reason)
         audit_hash = _audit_hash((reported.request.request_id, "NEEDS_HUMAN_REVIEW", *reasons))
         gated.append(DispatchProposal(reported.request.request_id, "NEEDS_HUMAN_REVIEW", None, None, None, reasons, audit_hash))

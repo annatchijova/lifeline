@@ -130,6 +130,25 @@ def _verify(out_dir: Path) -> int:
             print("plan seal: FAIL (plan.json does not match plan.seal.json)")
             failed = True
 
+    verification_path = out_dir / "verification.json"
+    verification_seal_path = out_dir / "verification.seal.json"
+    if verification_path.exists() or verification_seal_path.exists():
+        if not (verification_path.exists() and verification_seal_path.exists()):
+            print("verification seal: FAIL (verification.json and verification.seal.json must both exist)")
+            failed = True
+        else:
+            verification = json.loads(verification_path.read_text(encoding="utf-8"))
+            verification_seal = json.loads(verification_seal_path.read_text(encoding="utf-8"))
+            verification_ok = seal_digest(verification) == verification_seal.get("sha256")
+            bound_plan = verification.get("plan_sha256") == verification_seal.get("plan_sha256")
+            if plan_path.exists() and seal_path.exists():
+                bound_plan = bound_plan and verification.get("plan_sha256") == seal_digest(plan)
+            if verification_ok and bound_plan:
+                print(f"verification seal: PASS (sha256={verification_seal['sha256']}; bound to plan)")
+            else:
+                print("verification seal: FAIL (artifact digest or plan binding does not match)")
+                failed = True
+
     sim_path = out_dir / "simulation.json"
     sim_seal_path = out_dir / "simulation.seal.json"
     if sim_path.exists() or sim_seal_path.exists():

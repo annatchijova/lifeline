@@ -164,6 +164,8 @@ def test_static_scope_is_restricted(room):
     assert _get(base, "/web/room.html")[0] == 200
     status, body = _get(base, "/out/plan.seal.json")
     assert status == 200 and json.loads(body)["sha256"] == seal["sha256"]
+    status, body = _get(base, "/out/verification.json")
+    assert status == 200 and json.loads(body)["plan_sha256"] == seal["sha256"]
     status, body = _get(base, "/web/demo/plan.seal.json")
     assert status == 200 and "sha256" in json.loads(body)
     assert _get(base, "/.git/config")[0] == 404
@@ -212,6 +214,8 @@ def test_incident_api_creates_searches_appends_and_plans(room):
     }, token)
     assert status == 200
     assert planned["revision"] == 3 and planned["seal"]["sha256"]
+    assert planned["verification"]["plan_sha256"] == planned["seal"]["sha256"]
+    assert planned["verification_seal"]["sha256"]
 
     proposal = _proposed(planned["plan"])
     status, recorded = _post_to(base, "/api/incidents/flood-v1-synthetic/approvals", {

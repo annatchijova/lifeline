@@ -19,6 +19,7 @@ from lifeline.approvals import ACTIONS, ApprovalChainError, append_entry, read_e
 from lifeline.export import plan_payload, seal_digest
 from lifeline.scenario import ScenarioError, parse_scenario, plan_scenario
 from lifeline.validators import validate_scenario
+from lifeline.verification import verification_payload
 
 
 ENTITY_COLLECTIONS = {
@@ -409,14 +410,24 @@ class IncidentStore:
         # Unlike a standalone export, this plan is bound to a persisted state revision.
         payload["incident_revision"] = snapshot.revision
         payload["incident_scenario_sha256"] = snapshot.scenario_sha256
+        plan_sha256 = seal_digest(payload)
+        verification = verification_payload(scenario, proposals, findings, plan_sha256=plan_sha256)
+        verification["incident_revision"] = snapshot.revision
+        verification["incident_scenario_sha256"] = snapshot.scenario_sha256
         return {
             "incident_id": incident_id,
             "revision": snapshot.revision,
             "scenario_sha256": snapshot.scenario_sha256,
             "plan": payload,
             "seal": {
-                "sha256": seal_digest(payload),
+                "sha256": plan_sha256,
                 "plan_version": payload["plan_version"],
+            },
+            "verification": verification,
+            "verification_seal": {
+                "sha256": seal_digest(verification),
+                "verification_version": verification["verification_version"],
+                "plan_sha256": plan_sha256,
             },
         }
 

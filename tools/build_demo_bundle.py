@@ -21,6 +21,8 @@ def main() -> None:
         "room": read_json("room.geojson"),
         "plan": read_json("plan.json"),
         "seal": read_json("plan.seal.json"),
+        "verification": read_json("verification.json"),
+        "verificationSeal": read_json("verification.seal.json"),
         "simulation": read_json("simulation.json"),
     }
     encoded = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)

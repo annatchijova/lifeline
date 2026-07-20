@@ -18,9 +18,11 @@ from lifeline.briefing import incident_briefing
 from lifeline.core import DispatchProposal
 from lifeline.scenario import Scenario, load_scenario, plan_scenario, route_usable
 from lifeline.validators import Finding, validate_scenario
+from lifeline.verification import verification_payload
 
 CANONICALIZE_VERSION = 1
 PLAN_VERSION = 3
+VERIFICATION_SEAL_VERSION = 1
 
 
 class CanonicalizationError(ValueError):
@@ -202,6 +204,8 @@ def export_plan(scenario_path: str | Path, out_dir: str | Path, reference_time: 
     proposals = plan_scenario(scenario)
     payload = plan_payload(scenario, proposals, findings, reference_time)
     digest = seal_digest(payload)
+    verification = verification_payload(scenario, proposals, findings, plan_sha256=digest)
+    verification_digest = seal_digest(verification)
 
     (out / "plan.json").write_text(
         json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
@@ -214,6 +218,16 @@ def export_plan(scenario_path: str | Path, out_dir: str | Path, reference_time: 
     }
     (out / "plan.seal.json").write_text(
         json.dumps(seal, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    (out / "verification.json").write_text(
+        json.dumps(verification, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    (out / "verification.seal.json").write_text(
+        json.dumps({
+            "sha256": verification_digest,
+            "canonicalize_version": CANONICALIZE_VERSION,
+            "verification_version": verification["verification_version"],
+            "plan_sha256": digest,
+            "seal_version": VERIFICATION_SEAL_VERSION,
+        }, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     (out / "room.geojson").write_text(
         json.dumps(room_geojson(scenario, proposals, findings), indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     return ExportResult(seal, scenario, proposals, findings)

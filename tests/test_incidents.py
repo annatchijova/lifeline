@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from lifeline.incidents import IncidentConflict, IncidentStore, _digest
+from lifeline.export import seal_digest
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -120,6 +121,10 @@ def test_incident_approval_is_bound_to_the_sealed_persisted_revision(tmp_path):
     store = IncidentStore(tmp_path / "incidents.sqlite3")
     created = store.create(_scenario())
     plan = store.plan(created.incident_id, "2026-07-17T11:00:00Z")
+    assert plan["verification"]["plan_sha256"] == plan["seal"]["sha256"]
+    assert plan["verification_seal"]["plan_sha256"] == plan["seal"]["sha256"]
+    assert plan["verification_seal"]["sha256"] == seal_digest(plan["verification"])
+    assert plan["verification"]["incident_revision"] == created.revision
     proposal = next(item for item in plan["plan"]["proposals"] if item["status"] == "PROPOSED")
 
     entry = store.record_approval(
