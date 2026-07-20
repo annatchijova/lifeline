@@ -1,5 +1,6 @@
 import json
 import os
+import socket
 import threading
 import urllib.error
 import urllib.request
@@ -94,6 +95,21 @@ def _proposed(plan):
     return next(p for p in plan["proposals"] if p["status"] == "PROPOSED")
 
 
+def _raw_approval_request(base, token, content_length: str) -> bytes:
+    port = int(base.rsplit(":", 1)[1])
+    request = (
+        "POST /api/approvals HTTP/1.1\r\n"
+        f"Host: 127.0.0.1:{port}\r\n"
+        f"Authorization: Bearer {token}\r\n"
+        "Content-Type: application/json\r\n"
+        f"Content-Length: {content_length}\r\n"
+        "Connection: close\r\n\r\n{}"
+    ).encode("ascii")
+    with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
+        client.sendall(request)
+        return client.recv(4096)
+
+
 def test_records_approval_and_rejects_duplicate(room):
     base, plan, seal, out_dir, token = room
     proposal = _proposed(plan)
@@ -117,6 +133,14 @@ def test_records_approval_and_rejects_duplicate(room):
     assert status == 200
     assert listing["chain_ok"] is True
     assert len(listing["entries"]) == 1
+
+
+def test_rejects_non_numeric_content_length_with_a_controlled_response(room):
+    base, _, _, _, token = room
+    response = _raw_approval_request(base, token, "definitely-not-a-number")
+
+    assert response.startswith(b"HTTP/1.0 400")
+    assert b"Content-Length must be an integer" in response
 
 
 def test_rejects_stale_plan_and_stale_proposal(room):

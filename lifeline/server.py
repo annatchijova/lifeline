@@ -90,7 +90,10 @@ class RoomHandler(SimpleHTTPRequestHandler):
         return posixpath.normpath(urlparse(self.path).path)
 
     def _json_body(self) -> dict:
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise ApiError(400, "Content-Length must be an integer")
         if length <= 0:
             raise ApiError(400, "empty body")
         if length > MAX_BODY_BYTES:
