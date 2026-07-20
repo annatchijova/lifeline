@@ -124,6 +124,10 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
   <aside>
     <h2 data-en="Proposed plan / human approval" data-es="Plan propuesto / aprobación humana">Proposed plan / human approval</h2>
     <p class="sub" id="room-description"></p>
+    <div id="runbook" style="display:none;margin:0 0 16px;padding:11px;border:1px solid rgba(63,199,106,.45);border-radius:9px;background:rgba(63,199,106,.07)">
+      <b style="color:var(--green);display:block;margin-bottom:8px;font-size:.85rem;letter-spacing:.08em" data-en="DEMO RUN OF SHOW — THE KERNEL'S COMPLETE PATH" data-es="RECORRIDO DE LA DEMO — EL CAMINO COMPLETO DEL KERNEL">DEMO RUN OF SHOW — THE KERNEL'S COMPLETE PATH</b>
+      <div id="runbook-list" style="display:grid;gap:6px"></div>
+    </div>
     <div id="overview" class="overview" aria-live="polite"></div>
     <p id="briefingnote" class="briefing-note"></p>
     <label id="token-row" style="display:block;margin:0 0 12px;font-size:.9rem;color:var(--muted)">
@@ -394,6 +398,26 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
       "Este resumen es una lectura completa del plan sellado. No clasifica personas ni autoriza un despacho.");
   }
 
+  function renderRunbook() {
+    const box = document.getElementById("runbook");
+    if (!state.plan || !state.room) { box.style.display = "none"; return; }
+    const features = state.room.features || [];
+    const count = type => features.filter(feature => feature.properties.feature_type === type).length;
+    const findings = (state.plan.validation_findings || []).length;
+    const proposed = state.plan.proposals.filter(item => item.status === "PROPOSED").length;
+    const review = state.plan.proposals.length - proposed;
+    const steps = [
+      ["01", w("INGEST", "INGRESAR"), `${count("request")} ${w("requests", "pedidos")} · ${count("resource")} ${w("resources", "recursos")} · ${count("shelter")} ${w("shelters", "refugios")} · ${count("route")} ${w("route reports", "reportes de rutas")}`],
+      ["02", w("CORROBORATE", "CORROBORAR"), `${findings} ${w("sealed validation findings", "hallazgos de validación sellados")} · ${w("contradictions remain visible", "las contradicciones siguen visibles")}`],
+      ["03", w("PLAN", "PLANIFICAR"), `${proposed} ${w("proposals", "propuestas")} · ${review} ${w("human-review gates", "bloqueos para revisión humana")}`],
+      ["04", w("SIMULATE", "SIMULAR"), `${state.sim ? state.sim.variants.length : 0} ${w("declared what-if variants", "variantes what-if declaradas")}`],
+      ["05", w("SEAL + ACCOUNT", "SELLAR + RESPONDER"), `${w("plan + verification seals", "sellos del plan y verificación")} · ${w("human approval remains required", "la aprobación humana sigue siendo obligatoria")}`],
+    ];
+    const list = document.getElementById("runbook-list");
+    list.innerHTML = steps.map(([number, title, detail]) => `<div style="display:grid;grid-template-columns:28px 105px 1fr;gap:7px;align-items:baseline;font-size:.8rem"><b style="color:var(--water)">${number}</b><strong style="color:var(--paper)">${title}</strong><span>${detail}</span></div>`).join("");
+    box.style.display = "block";
+  }
+
   function renderProposals() {
     const container = document.getElementById("proposals");
     container.innerHTML = "";
@@ -600,6 +624,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
   }
 
   function renderAll() {
+    renderRunbook();
     renderOverview();
     renderProposals();
     renderFindings();
