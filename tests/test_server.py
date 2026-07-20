@@ -9,7 +9,7 @@ import pytest
 
 from lifeline.export import export_plan
 from lifeline.auth import OperatorStore
-from lifeline.server import make_server
+from lifeline.server import make_server, serve
 
 REPO = Path(__file__).resolve().parent.parent
 SCENARIO_PATH = REPO / "scenarios" / "flood_v1.json"
@@ -194,6 +194,24 @@ def test_public_artifacts_reject_symlinks_for_get_and_head(room, tmp_path):
 
     assert _get(base, "/out/plan.json")[0] == 404
     assert _head(base, "/out/plan.json") == 404
+
+
+def test_serve_describes_the_actual_local_authentication_boundary(monkeypatch, capsys, tmp_path):
+    class FakeServer:
+        approvals_path = tmp_path / "approvals.jsonl"
+
+        def serve_forever(self):
+            raise KeyboardInterrupt
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr("lifeline.server.make_server", lambda *args, **kwargs: FakeServer())
+    serve(tmp_path, tmp_path)
+
+    output = capsys.readouterr().out
+    assert "bearer-token authentication is required" in output
+    assert "no authentication" not in output
 
 
 def test_incident_api_creates_searches_appends_and_plans(room):

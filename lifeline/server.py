@@ -424,7 +424,7 @@ def serve(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.1", po
     server = make_server(root_dir, out_dir, host, port)
     print(f"incident room: http://{host}:{port}/web/room.html")
     print(f"approvals log: {server.approvals_path} (append-only, hash-chained)")
-    print("local use only: no authentication; approver identity is declared, not verified")
+    print("local use only: bearer-token authentication is required; approver identity comes from the authenticated operator")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
