@@ -36,7 +36,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from lifeline.approvals import ACTIONS, ApprovalChainError, append_entry, read_entries, verify_chain
 from lifeline.alerts import alerts_from_events
 from lifeline.auth import AuthError, Operator, OperatorStore
-from lifeline.export import seal_digest
+from lifeline.export import CanonicalizationError, seal_digest
 from lifeline.incidents import IncidentConflict, IncidentNotFound, IncidentStore, IncidentStoreError
 
 MAX_BODY_BYTES = 8192
@@ -59,9 +59,21 @@ def _load_current_plan(out_dir: Path) -> tuple[dict, str]:
     seal_path = out_dir / "plan.seal.json"
     if not plan_path.exists() or not seal_path.exists():
         raise ApiError(404, "no exported plan found; run: python3 -m lifeline plan <scenario> --out out")
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    seal = json.loads(seal_path.read_text(encoding="utf-8"))
-    recomputed = seal_digest(plan)
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        seal = json.loads(seal_path.read_text(encoding="utf-8"))
+        if not isinstance(plan, dict) or not isinstance(seal, dict):
+            raise ValueError("plan and seal must be JSON objects")
+        proposals = plan.get("proposals")
+        if not isinstance(proposals, list) or any(
+            not isinstance(proposal, dict)
+            or any(not isinstance(proposal.get(field), str) for field in ("request_id", "status", "audit_hash"))
+            for proposal in proposals
+        ):
+            raise ValueError("plan proposals have an invalid shape")
+        recomputed = seal_digest(plan)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, CanonicalizationError, ValueError) as error:
+        raise ApiError(500, "exported plan artifacts are unreadable; refusing to record approvals") from error
     if recomputed != seal.get("sha256"):
         raise ApiError(500, "plan.json does not match plan.seal.json; refusing to record approvals")
     return plan, recomputed

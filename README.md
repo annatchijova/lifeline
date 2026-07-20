@@ -112,6 +112,9 @@ kernel exported: `out/room.geojson` (display layer, floats allowed),
 bound to that exact plan). If CRONOS is
 available locally, each run also records a planning trace in
 `out/trace.sqlite`; its absence only skips the trace.
+Each artifact is published atomically within the output directory; an
+interrupted multi-file re-export remains detectable by its seals and cannot
+record an approval. See [the export recovery boundary](docs/EXPORT_RECOVERY.md).
 
 The top of the room is a deterministic briefing embedded in the sealed plan:
 it exposes the complete proposal/review counts and validation warnings without

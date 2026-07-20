@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from lifeline.approvals import ApprovalChainError, read_entries, verify_chain
-from lifeline.export import export_plan, seal_digest
+from lifeline.export import CanonicalizationError, export_plan, seal_digest
 from lifeline.scenario import ScenarioError
 from lifeline.trace import record_trace
 from lifeline.verification import VerificationError, verify_payload
@@ -125,14 +125,19 @@ def _verify(out_dir: Path) -> int:
         print("plan seal: FAIL (plan.json or plan.seal.json missing)")
         failed = True
     else:
-        plan = json.loads(plan_path.read_text(encoding="utf-8"))
-        seal = json.loads(seal_path.read_text(encoding="utf-8"))
-        plan_digest = seal_digest(plan)
-        if plan_digest == seal.get("sha256"):
-            print(f"plan seal: PASS (sha256={seal['sha256']})")
-        else:
-            print("plan seal: FAIL (plan.json does not match plan.seal.json)")
+        try:
+            plan = _read_json_object(plan_path)
+            seal = _read_json_object(seal_path)
+            plan_digest = seal_digest(plan)
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError, CanonicalizationError, ValueError):
+            print("plan seal: FAIL (plan.json or plan.seal.json is unreadable)")
             failed = True
+        else:
+            if plan_digest == seal.get("sha256"):
+                print(f"plan seal: PASS (sha256={seal['sha256']})")
+            else:
+                print("plan seal: FAIL (plan.json does not match plan.seal.json)")
+                failed = True
 
     verification_path = out_dir / "verification.json"
     verification_seal_path = out_dir / "verification.seal.json"
@@ -141,26 +146,31 @@ def _verify(out_dir: Path) -> int:
             print("verification seal: FAIL (verification.json and verification.seal.json must both exist)")
             failed = True
         else:
-            verification = json.loads(verification_path.read_text(encoding="utf-8"))
-            verification_seal = json.loads(verification_seal_path.read_text(encoding="utf-8"))
-            verification_ok = seal_digest(verification) == verification_seal.get("sha256")
-            bound_plan = verification.get("plan_sha256") == verification_seal.get("plan_sha256")
-            bound_plan = bound_plan and plan_digest is not None and verification.get("plan_sha256") == plan_digest
-            if verification_ok and bound_plan and plan is not None:
-                print(f"verification seal: PASS (sha256={verification_seal['sha256']}; bound to plan)")
-                try:
-                    verify_payload(
-                        verification,
-                        plan,
-                        expected_plan_sha256=plan_digest,
-                    )
-                    print("verification semantics: PASS (contract and human-approval boundary hold)")
-                except VerificationError as error:
-                    print(f"verification semantics: FAIL ({error})")
-                    failed = True
-            else:
-                print("verification seal: FAIL (artifact digest or plan binding does not match)")
+            try:
+                verification = _read_json_object(verification_path)
+                verification_seal = _read_json_object(verification_seal_path)
+                verification_ok = seal_digest(verification) == verification_seal.get("sha256")
+                bound_plan = verification.get("plan_sha256") == verification_seal.get("plan_sha256")
+                bound_plan = bound_plan and plan_digest is not None and verification.get("plan_sha256") == plan_digest
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, CanonicalizationError, ValueError):
+                print("verification seal: FAIL (verification artifacts are unreadable)")
                 failed = True
+            else:
+                if verification_ok and bound_plan and plan is not None:
+                    print(f"verification seal: PASS (sha256={verification_seal['sha256']}; bound to plan)")
+                    try:
+                        verify_payload(
+                            verification,
+                            plan,
+                            expected_plan_sha256=plan_digest,
+                        )
+                        print("verification semantics: PASS (contract and human-approval boundary hold)")
+                    except VerificationError as error:
+                        print(f"verification semantics: FAIL ({error})")
+                        failed = True
+                else:
+                    print("verification seal: FAIL (artifact digest or plan binding does not match)")
+                    failed = True
 
     sim_path = out_dir / "simulation.json"
     sim_seal_path = out_dir / "simulation.seal.json"
@@ -169,13 +179,19 @@ def _verify(out_dir: Path) -> int:
             print("simulation seal: FAIL (simulation.json and simulation.seal.json must both exist)")
             failed = True
         else:
-            sim = json.loads(sim_path.read_text(encoding="utf-8"))
-            sim_seal = json.loads(sim_seal_path.read_text(encoding="utf-8"))
-            if seal_digest(sim) == sim_seal.get("sha256"):
-                print(f"simulation seal: PASS (sha256={sim_seal['sha256']})")
-            else:
-                print("simulation seal: FAIL (simulation.json does not match simulation.seal.json)")
+            try:
+                sim = _read_json_object(sim_path)
+                sim_seal = _read_json_object(sim_seal_path)
+                simulation_ok = seal_digest(sim) == sim_seal.get("sha256")
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError, CanonicalizationError, ValueError):
+                print("simulation seal: FAIL (simulation artifacts are unreadable)")
                 failed = True
+            else:
+                if simulation_ok:
+                    print(f"simulation seal: PASS (sha256={sim_seal['sha256']})")
+                else:
+                    print("simulation seal: FAIL (simulation.json does not match simulation.seal.json)")
+                    failed = True
 
     approvals_path = out_dir / "approvals.jsonl"
     if not approvals_path.exists():
@@ -202,6 +218,13 @@ def _verify(out_dir: Path) -> int:
             failed = True
 
     return 1 if failed else 0
+
+
+def _read_json_object(path: Path) -> dict:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError(f"{path.name} must be a JSON object")
+    return value
 
 
 if __name__ == "__main__":

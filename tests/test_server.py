@@ -134,6 +134,45 @@ def test_rejects_stale_plan_and_stale_proposal(room):
     assert status == 409 and "stale proposal" in body["error"]
 
 
+def test_refuses_a_truncated_export_without_recording_an_approval(room):
+    base, plan, seal, out_dir, token = room
+    proposal = _proposed(plan)
+    (out_dir / "plan.json").write_text('{"partial":', encoding="utf-8")
+
+    status, body = _post(base, {
+        "request_id": proposal["request_id"], "action": "approve", "approver": "test-admin",
+        "proposal_audit_hash": proposal["audit_hash"], "plan_sha256": seal["sha256"],
+    }, token)
+
+    assert status == 500
+    assert body["error"] == "exported plan artifacts are unreadable; refusing to record approvals"
+    assert not (out_dir / "approvals.jsonl").exists()
+
+
+def test_refuses_an_interrupted_reexport_with_mixed_plan_and_seal_generations(room, monkeypatch):
+    base, plan, seal, out_dir, token = room
+    proposal = _proposed(plan)
+    original_replace = Path.replace
+
+    def fail_seal_publish(source, target):
+        if Path(target).name == "plan.seal.json":
+            raise OSError("synthetic interruption after plan publish")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", fail_seal_publish)
+    with pytest.raises(OSError, match="synthetic interruption after plan publish"):
+        export_plan(SCENARIO_PATH, out_dir, reference_time="2026-07-17T11:00:00Z")
+
+    status, body = _post(base, {
+        "request_id": proposal["request_id"], "action": "approve", "approver": "test-admin",
+        "proposal_audit_hash": proposal["audit_hash"], "plan_sha256": seal["sha256"],
+    }, token)
+
+    assert status == 500
+    assert body["error"] == "plan.json does not match plan.seal.json; refusing to record approvals"
+    assert not (out_dir / "approvals.jsonl").exists()
+
+
 def test_rejects_decisions_on_gated_items_and_bad_input(room):
     base, plan, seal, _, token = room
     gated = next(p for p in plan["proposals"] if p["status"] == "NEEDS_HUMAN_REVIEW")
