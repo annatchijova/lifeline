@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 import urllib.error
 import urllib.request
@@ -68,6 +69,15 @@ def _get(base, path):
             return response.status, response.read()
     except urllib.error.HTTPError as error:
         return error.code, b""
+
+
+def _head(base, path):
+    request = urllib.request.Request(f"{base}{path}", method="HEAD")
+    try:
+        with urllib.request.urlopen(request) as response:
+            return response.status
+    except urllib.error.HTTPError as error:
+        return error.code
 
 
 def _get_json(base, path, token=None):
@@ -164,11 +174,26 @@ def test_static_scope_is_restricted(room):
     assert _get(base, "/web/room.html")[0] == 200
     status, body = _get(base, "/out/plan.seal.json")
     assert status == 200 and json.loads(body)["sha256"] == seal["sha256"]
+    assert _head(base, "/out/plan.seal.json") == 200
+    assert _head(base, "/out/operators.sqlite3") == 404
+    status, body = _get(base, "/out/verification.json")
+    assert status == 200 and json.loads(body)["plan_sha256"] == seal["sha256"]
     status, body = _get(base, "/web/demo/plan.seal.json")
     assert status == 200 and "sha256" in json.loads(body)
     assert _get(base, "/.git/config")[0] == 404
     assert _get(base, "/web/../.git/config")[0] == 404
     assert _get(base, "/lifeline/core.py")[0] == 404
+
+
+def test_public_artifacts_reject_symlinks_for_get_and_head(room, tmp_path):
+    base, _, _, out_dir, _ = room
+    target = tmp_path / "synthetic-server-readable.txt"
+    target.write_text("LIFELINE_AUDIT_SYNTHETIC_SECRET", encoding="utf-8")
+    (out_dir / "plan.json").unlink()
+    os.symlink(target, out_dir / "plan.json")
+
+    assert _get(base, "/out/plan.json")[0] == 404
+    assert _head(base, "/out/plan.json") == 404
 
 
 def test_incident_api_creates_searches_appends_and_plans(room):
@@ -212,6 +237,8 @@ def test_incident_api_creates_searches_appends_and_plans(room):
     }, token)
     assert status == 200
     assert planned["revision"] == 3 and planned["seal"]["sha256"]
+    assert planned["verification"]["plan_sha256"] == planned["seal"]["sha256"]
+    assert planned["verification_seal"]["sha256"]
 
     proposal = _proposed(planned["plan"])
     status, recorded = _post_to(base, "/api/incidents/flood-v1-synthetic/approvals", {

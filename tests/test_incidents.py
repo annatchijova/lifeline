@@ -1,9 +1,11 @@
 import json
+import threading
 from pathlib import Path
 
 import pytest
 
 from lifeline.incidents import IncidentConflict, IncidentStore, _digest
+from lifeline.export import seal_digest
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -120,6 +122,10 @@ def test_incident_approval_is_bound_to_the_sealed_persisted_revision(tmp_path):
     store = IncidentStore(tmp_path / "incidents.sqlite3")
     created = store.create(_scenario())
     plan = store.plan(created.incident_id, "2026-07-17T11:00:00Z")
+    assert plan["verification"]["plan_sha256"] == plan["seal"]["sha256"]
+    assert plan["verification_seal"]["plan_sha256"] == plan["seal"]["sha256"]
+    assert plan["verification_seal"]["sha256"] == seal_digest(plan["verification"])
+    assert plan["verification"]["incident_revision"] == created.revision
     proposal = next(item for item in plan["plan"]["proposals"] if item["status"] == "PROPOSED")
 
     entry = store.record_approval(
@@ -137,3 +143,37 @@ def test_incident_approval_is_bound_to_the_sealed_persisted_revision(tmp_path):
             proposal_audit_hash=proposal["audit_hash"], plan_sha256=plan["seal"]["sha256"],
             reference_time="2026-07-17T11:00:00Z",
         )
+
+
+def test_incident_approval_claim_is_atomic_across_store_instances(tmp_path):
+    path = tmp_path / "incidents.sqlite3"
+    first = IncidentStore(path)
+    second = IncidentStore(path)
+    created = first.create(_scenario())
+    plan = first.plan(created.incident_id, "2026-07-17T11:00:00Z")
+    proposal = next(item for item in plan["plan"]["proposals"] if item["status"] == "PROPOSED")
+    barrier = threading.Barrier(2)
+    entries = []
+    errors = []
+
+    def record(store):
+        barrier.wait(timeout=5)
+        try:
+            entries.append(store.record_approval(
+                created.incident_id, request_id=proposal["request_id"], action="approve",
+                approver="anna-coordinator", proposal_audit_hash=proposal["audit_hash"],
+                plan_sha256=plan["seal"]["sha256"], reference_time="2026-07-17T11:00:00Z",
+            ))
+        except IncidentConflict as error:
+            errors.append(error)
+
+    threads = [threading.Thread(target=record, args=(store,)) for store in (first, second)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=10)
+
+    assert len(entries) == 1
+    assert len(errors) == 1
+    assert "already recorded" in str(errors[0])
+    assert len(first.approvals(created.incident_id)) == 1

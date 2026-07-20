@@ -24,7 +24,9 @@ renders only the caller's `/out/*` export.
 from __future__ import annotations
 
 import json
+import os
 import posixpath
+import stat
 import threading
 from datetime import datetime, timezone
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -39,7 +41,10 @@ from lifeline.incidents import IncidentConflict, IncidentNotFound, IncidentStore
 
 MAX_BODY_BYTES = 8192
 MAX_FIELD_LENGTH = 200
-PUBLIC_ARTIFACTS = frozenset({"plan.json", "plan.seal.json", "room.geojson", "simulation.json", "simulation.seal.json"})
+PUBLIC_ARTIFACTS = frozenset({
+    "plan.json", "plan.seal.json", "verification.json", "verification.seal.json", "room.geojson",
+    "simulation.json", "simulation.seal.json",
+})
 
 
 class ApiError(Exception):
@@ -92,6 +97,47 @@ class RoomHandler(SimpleHTTPRequestHandler):
             relative = clean[len("/out"):].lstrip("/")
             return str(self.server.out_dir / relative)
         return super().translate_path(path)
+
+    def _public_artifact_name(self, clean: str) -> str | None:
+        if not clean.startswith("/out/"):
+            return None
+        artifact = clean.rsplit("/", 1)[-1]
+        return artifact if artifact in PUBLIC_ARTIFACTS else None
+
+    def _open_public_artifact(self, artifact: str) -> tuple[int, os.stat_result] | None:
+        """Open one allowed artifact without following a symlink.
+
+        Artifact names are an allowlist, but a name alone is not a filesystem
+        boundary: a writable out directory could replace a permitted name with
+        a symlink.  On POSIX, O_NOFOLLOW closes the check/open race as well.
+        """
+        path = self.server.out_dir / artifact
+        if path.is_symlink():
+            return None
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        try:
+            descriptor = os.open(path, flags)
+        except OSError:
+            return None
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            os.close(descriptor)
+            return None
+        return descriptor, info
+
+    def _serve_public_artifact(self, artifact: str, *, head_only: bool) -> None:
+        opened = self._open_public_artifact(artifact)
+        if opened is None:
+            self.send_error(404, "artifact is not publicly served")
+            return
+        descriptor, info = opened
+        with os.fdopen(descriptor, "rb") as source:
+            self.send_response(200)
+            self.send_header("Content-Type", self.guess_type(str(self.server.out_dir / artifact)))
+            self.send_header("Content-Length", str(info.st_size))
+            self.end_headers()
+            if not head_only:
+                self.copyfile(source, self.wfile)
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -150,16 +196,30 @@ class RoomHandler(SimpleHTTPRequestHandler):
             self.end_headers()
             return
         if clean.startswith("/out/"):
-            artifact = clean.rsplit("/", 1)[-1]
-            if artifact not in PUBLIC_ARTIFACTS:
+            artifact = self._public_artifact_name(clean)
+            if artifact is None:
                 self.send_error(404, "artifact is not publicly served")
                 return
-            super().do_GET()
+            self._serve_public_artifact(artifact, head_only=False)
             return
         if clean == "/web" or clean.startswith("/web/"):
             super().do_GET()
             return
         self.send_error(404, "only /web/, selected /out/ artifacts, and /api/ are served")
+
+    def do_HEAD(self):
+        clean = self._clean_path()
+        if clean.startswith("/out/"):
+            artifact = self._public_artifact_name(clean)
+            if artifact is None:
+                self.send_error(404, "artifact is not publicly served")
+                return
+            self._serve_public_artifact(artifact, head_only=True)
+            return
+        if clean == "/web" or clean.startswith("/web/"):
+            super().do_HEAD()
+            return
+        self.send_error(404, "only /web/ and selected /out/ artifacts are served")
 
     def do_POST(self):
         clean = self._clean_path()

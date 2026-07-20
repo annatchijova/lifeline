@@ -65,6 +65,28 @@ def test_sealed_plan_contains_no_floats(tmp_path):
     walk(plan)
 
 
+def test_verify_rejects_a_resigned_verification_artifact_with_unknown_authority(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    verification_path = tmp_path / "verification.json"
+    seal_path = tmp_path / "verification.seal.json"
+    verification = json.loads(verification_path.read_text(encoding="utf-8"))
+    blocked = next(node for node in verification["nodes"] if node["proposal_status"] == "NEEDS_HUMAN_REVIEW")
+    blocked["action_required"] = "DEPLOY_BOAT_UNIT_7_NOW"
+    verification_path.write_text(json.dumps(verification), encoding="utf-8")
+    seal = json.loads(seal_path.read_text(encoding="utf-8"))
+    seal["sha256"] = seal_digest(verification)
+    seal_path.write_text(json.dumps(seal), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "lifeline", "verify", "--out", str(tmp_path)],
+        cwd=REPO, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 1
+    assert "verification seal: PASS" in result.stdout
+    assert "verification semantics: FAIL (blocked node for family-south has an unknown verification action)" in result.stdout
+
+
 def test_sealed_plan_contains_a_complete_non_authoritative_briefing(tmp_path):
     export_plan(SCENARIO_PATH, tmp_path)
     plan = json.loads((tmp_path / "plan.json").read_text())

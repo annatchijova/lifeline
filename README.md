@@ -1,14 +1,44 @@
 # LIFELINE
 
-**Open infrastructure for humanitarian coordination.**
+### When the water rises, the first enemy is not the flood. It is the fog.
 
-LIFELINE is a decision-support system for incident coordinators. It turns
-verified operational facts — requests for help, available resources, routes,
-and shelter capacity — into a transparent proposed dispatch plan.
+In the opening hours of a disaster, people are rarely lost for lack of boats or
+beds. They are lost for lack of a shared picture. Which family called. Which
+road is still open. Which shelter still has room. Which boat already left, and
+where it went. The facts exist — scattered across radios, spreadsheets, and the
+memory of exhausted people. No one can see them whole, in time.
 
-It does not autonomously dispatch responders, determine who is rescued, or
-claim to predict survival. A human coordinator remains responsible for every
-operational decision.
+The tempting fix is to hand the whole mess to an algorithm and let it decide who
+gets rescued first. **LIFELINE refuses to do that — on purpose.**
+
+LIFELINE is open infrastructure for humanitarian coordination that makes the
+truth *inspectable* and leaves the decision with a human. It turns verified
+operational facts — requests for help, available resources, open routes, shelter
+capacity — into a transparent, reproducible dispatch **proposal**. Then it
+stops. It never sends a responder. It never ranks whose life matters more. It
+never claims to predict who survives. A coordinator makes every call and carries
+every consequence — but now they can see the whole board while they do.
+
+Because when a machine gets a disaster decision wrong, *"the algorithm chose"* is
+not an answer anyone can live with. So LIFELINE is built the other way around: a
+person is always the one who chooses, every fact behind that choice has a
+source, every proposal waits for a human yes, and every action is sealed into an
+audit trail that cannot be quietly rewritten.
+
+> **The map is not the decision. The person is.**
+
+## Three commitments — written into the code, not just the pitch
+
+- **Facts have sources.** A request, resource, route, or shelter must be
+  verified and fresh before it can shape a plan. Contradictions are downgraded,
+  never averaged away. LIFELINE would rather say *"I can't corroborate this"*
+  than proceed on a guess.
+- **Feasible is explicit.** Capacity, route status, availability, medical
+  compatibility — hard constraints checked deterministically, not a model's
+  hunch. When a rescue can't be proposed, LIFELINE says exactly why.
+- **People stay accountable.** Every proposed action waits for an authorized
+  human, and every decision is written into a hash-chained, tamper-evident
+  ledger. You can always answer *who decided, on what evidence, and when.*
 
 ## First vertical slice
 
@@ -76,8 +106,10 @@ proposal.
 
 Open `http://127.0.0.1:8788/web/room.html?mode=live`. The live room renders only what the
 kernel exported: `out/room.geojson` (display layer, floats allowed),
-`out/plan.json` (sealed decision artifact, no floats), and
-`out/plan.seal.json` (SHA-256 digest and scenario digest). If CRONOS is
+`out/plan.json` (sealed decision artifact, no floats),
+`out/plan.seal.json` (SHA-256 digest and scenario digest), and
+`out/verification.json` (the non-authoritative, sealed evidence-gap artifact
+bound to that exact plan). If CRONOS is
 available locally, each run also records a planning trace in
 `out/trace.sqlite`; its absence only skips the trace.
 
@@ -96,7 +128,7 @@ client-supplied name. Verify everything offline with:
 python3 -m lifeline verify --out out
 ```
 
-This recomputes the plan seal, checks the approvals chain, and—when local
+This recomputes the plan and verification seals, checks their binding, checks the approvals chain, and—when local
 incidents exist—checks every incident snapshot against the tip of its
 hash-linked event ledger. Altered, inserted, reordered, or dropped interior
 entries fail verification. Tail truncation is only detectable once an external
@@ -173,6 +205,9 @@ Plans produced from a persisted incident have their own approval ledger. The
 plan includes the incident revision and scenario digest inside its seal; a
 coordinator can only record a decision against that exact plan. If a report,
 correction, or reference time changes, the old plan hash is rejected as stale.
+The persisted-plan endpoint returns the same non-authoritative verification
+artifact and independent seal as the CLI export, bound to that exact incident
+revision and plan hash.
 
 ```bash
 curl -X POST http://127.0.0.1:8788/api/incidents/flood-v1-synthetic/approvals \
@@ -226,6 +261,8 @@ cannot write approval records or dispatch anything.
 3. Per-organization identity integration, approval policy, and offline synchronization.
 4. Optional model narration outside the planning authority boundary.
 
-See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md) and
-[LIFELINE OS (Español)](docs/LIFELINE_OS.md) for the product architecture,
-ethical boundaries, simulation model, and the research patterns that inform it.
+See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md),
+[LIFELINE OS (Español)](docs/LIFELINE_OS.md), and the
+[verification artifact contract](docs/VERIFICATION_ARTIFACT.md) for the
+product architecture, ethical boundaries, simulation model, and the research
+patterns that inform it.
