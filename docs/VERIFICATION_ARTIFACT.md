@@ -77,6 +77,12 @@ but is excluded by verification state or freshness. A purely physical shortfall
 `FEASIBILITY_NOT_ESTABLISHED` limit; the artifact does not imply that an
 unverified report would make it feasible.
 
+Access to the pickup zone is modeled separately from the route to the
+destination. `ACCESS_ROUTE_CONTRADICTION` and
+`ACCESS_ROUTE_EVIDENCE_UNUSABLE` show why a factually suitable resource cannot
+reach a request. They request current access-route evidence and never imply
+that another resource should be sent.
+
 The contract deliberately retains unresolved evidence rather than deriving an
 unjustified recommendation from it.
 
@@ -92,11 +98,21 @@ plan.json ────────────────► plan.seal.json
                                       SHA-256(verification.json)
 ```
 
-`lifeline verify --out out` recomputes both hashes and confirms that the
-verification payload and its seal refer to the exact sealed plan. The
-verification artifact intentionally remains a sibling rather than being folded
-into `plan.json`: it explains the decision path but never becomes planning
-authority.
+`lifeline verify --out out` recomputes both hashes, confirms that the
+verification payload and its seal refer to the exact sealed plan, and validates
+the contract itself. The semantic check requires every plan proposal to be
+covered, rejects proposal-status disagreement and duplicate nodes, and rejects
+any action outside a closed vocabulary of verification work even if a modified
+artifact has been sealed again. This is an allowlist rather than a blocklist:
+`DEPLOY_*`, `DISPATCH_*`, or any future authority-shaped label is not a valid
+blocked-node action. `CLEAR` has its own single action,
+`HUMAN_APPROVAL_REQUIRED`. The generator and semantic verifier share this
+single action vocabulary, so an implementation cannot add a generated action
+without also making an explicit contract change.
+It does not certify the truth of a field report: that remains a new scenario
+and recomputation. The verification artifact intentionally remains a sibling
+rather than being folded into `plan.json`: it explains the decision path but
+never becomes planning authority.
 
 Plans returned from `POST /api/incidents/{id}/plan` carry the same pair in
 memory. Their verification payload also records `incident_revision` and

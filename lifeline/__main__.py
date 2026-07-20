@@ -12,6 +12,7 @@ from lifeline.approvals import ApprovalChainError, read_entries, verify_chain
 from lifeline.export import export_plan, seal_digest
 from lifeline.scenario import ScenarioError
 from lifeline.trace import record_trace
+from lifeline.verification import VerificationError, verify_payload
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -115,6 +116,8 @@ def main(argv: list[str] | None = None) -> int:
 
 def _verify(out_dir: Path) -> int:
     failed = False
+    plan: dict | None = None
+    plan_digest: str | None = None
 
     plan_path = out_dir / "plan.json"
     seal_path = out_dir / "plan.seal.json"
@@ -124,7 +127,8 @@ def _verify(out_dir: Path) -> int:
     else:
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
         seal = json.loads(seal_path.read_text(encoding="utf-8"))
-        if seal_digest(plan) == seal.get("sha256"):
+        plan_digest = seal_digest(plan)
+        if plan_digest == seal.get("sha256"):
             print(f"plan seal: PASS (sha256={seal['sha256']})")
         else:
             print("plan seal: FAIL (plan.json does not match plan.seal.json)")
@@ -141,10 +145,19 @@ def _verify(out_dir: Path) -> int:
             verification_seal = json.loads(verification_seal_path.read_text(encoding="utf-8"))
             verification_ok = seal_digest(verification) == verification_seal.get("sha256")
             bound_plan = verification.get("plan_sha256") == verification_seal.get("plan_sha256")
-            if plan_path.exists() and seal_path.exists():
-                bound_plan = bound_plan and verification.get("plan_sha256") == seal_digest(plan)
-            if verification_ok and bound_plan:
+            bound_plan = bound_plan and plan_digest is not None and verification.get("plan_sha256") == plan_digest
+            if verification_ok and bound_plan and plan is not None:
                 print(f"verification seal: PASS (sha256={verification_seal['sha256']}; bound to plan)")
+                try:
+                    verify_payload(
+                        verification,
+                        plan,
+                        expected_plan_sha256=plan_digest,
+                    )
+                    print("verification semantics: PASS (contract and human-approval boundary hold)")
+                except VerificationError as error:
+                    print(f"verification semantics: FAIL ({error})")
+                    failed = True
             else:
                 print("verification seal: FAIL (artifact digest or plan binding does not match)")
                 failed = True

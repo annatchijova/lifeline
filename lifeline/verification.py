@@ -39,6 +39,33 @@ class VerificationDisposition(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+class VerificationAction(str, Enum):
+    """The closed, non-authoritative vocabulary emitted by verification nodes."""
+
+    HUMAN_APPROVAL_REQUIRED = "HUMAN_APPROVAL_REQUIRED"
+    VERIFY_REQUEST_REPORT = "VERIFY_REQUEST_REPORT"
+    OBTAIN_DISCRIMINATING_EVIDENCE = "OBTAIN_DISCRIMINATING_EVIDENCE"
+    OBTAIN_FRESH_REQUEST_REPORT = "OBTAIN_FRESH_REQUEST_REPORT"
+    HUMAN_REVIEW_OF_FEASIBILITY = "HUMAN_REVIEW_OF_FEASIBILITY"
+    OBTAIN_DISCRIMINATING_ROUTE_EVIDENCE = "OBTAIN_DISCRIMINATING_ROUTE_EVIDENCE"
+    VERIFY_CURRENT_ROUTE_STATUS = "VERIFY_CURRENT_ROUTE_STATUS"
+    OBTAIN_DISCRIMINATING_ACCESS_ROUTE_EVIDENCE = "OBTAIN_DISCRIMINATING_ACCESS_ROUTE_EVIDENCE"
+    VERIFY_CURRENT_ACCESS_ROUTE_STATUS = "VERIFY_CURRENT_ACCESS_ROUTE_STATUS"
+    VERIFY_CURRENT_RESOURCE_AVAILABILITY = "VERIFY_CURRENT_RESOURCE_AVAILABILITY"
+    VERIFY_CURRENT_DESTINATION_CAPACITY = "VERIFY_CURRENT_DESTINATION_CAPACITY"
+
+
+CLEAR_ACTION = VerificationAction.HUMAN_APPROVAL_REQUIRED.value
+BLOCKED_ACTIONS = frozenset(
+    action.value for action in VerificationAction
+    if action is not VerificationAction.HUMAN_APPROVAL_REQUIRED
+)
+
+
+class VerificationError(ValueError):
+    """A sealed verification payload violates LIFELINE's authority boundary."""
+
+
 @dataclass(frozen=True)
 class EvidenceReference:
     entity_type: str
@@ -74,7 +101,7 @@ class VerificationNode:
     disposition: VerificationDisposition
     reason_code: str
     detail: str
-    action_required: str
+    action_required: VerificationAction
     required_artifacts: tuple[str, ...]
     supports: tuple[EvidenceReference, ...]
     refutes: tuple[EvidenceReference, ...]
@@ -87,7 +114,7 @@ class VerificationNode:
             "disposition": self.disposition.value,
             "reason_code": self.reason_code,
             "detail": self.detail,
-            "action_required": self.action_required,
+            "action_required": self.action_required.value,
             "required_artifacts": list(self.required_artifacts),
             "supports": [item.as_dict() for item in self.supports],
             "refutes": [item.as_dict() for item in self.refutes],
@@ -121,7 +148,7 @@ def _request_node(request_id: str, proposal: DispatchProposal, provenance: Prove
             request_id, proposal.status, VerificationDisposition.BLOCKED,
             "REQUEST_CONTRADICTION",
             "The request report is marked conflicting, so it cannot support a deterministic proposal.",
-            "OBTAIN_DISCRIMINATING_EVIDENCE",
+            VerificationAction.OBTAIN_DISCRIMINATING_EVIDENCE,
             ("independent_authorized_request_confirmation",),
             (evidence,), (),
             ("The competing reports are not resolved by this plan.",),
@@ -131,7 +158,7 @@ def _request_node(request_id: str, proposal: DispatchProposal, provenance: Prove
             request_id, proposal.status, VerificationDisposition.BLOCKED,
             "REQUEST_UNVERIFIED",
             "The request report is not verified, so it cannot support a deterministic proposal.",
-            "VERIFY_REQUEST_REPORT",
+            VerificationAction.VERIFY_REQUEST_REPORT,
             ("authorized_request_confirmation",),
             (evidence,), (),
             ("The reported request remains unverified.",),
@@ -141,7 +168,7 @@ def _request_node(request_id: str, proposal: DispatchProposal, provenance: Prove
             request_id, proposal.status, VerificationDisposition.BLOCKED,
             "REQUEST_STALE",
             "The request report is stale, so it cannot support a deterministic proposal.",
-            "OBTAIN_FRESH_REQUEST_REPORT",
+            VerificationAction.OBTAIN_FRESH_REQUEST_REPORT,
             ("fresh_authorized_request_report",),
             (evidence,), (),
             ("The plan cannot establish that the request is still current.",),
@@ -155,7 +182,7 @@ def _feasibility_node(request_id: str, proposal: DispatchProposal) -> Verificati
         request_id, proposal.status, VerificationDisposition.BLOCKED,
         "FEASIBILITY_NOT_ESTABLISHED",
         "The deterministic planner could not establish a feasible proposal from the verified, current evidence.",
-        "HUMAN_REVIEW_OF_FEASIBILITY",
+        VerificationAction.HUMAN_REVIEW_OF_FEASIBILITY,
         ("human_verified_feasible_resource_route_and_destination_capacity",),
         (), (), reasons or ("The planner recorded a review state without a specific evidence gate.",),
     )
@@ -182,17 +209,61 @@ def _route_evidence_nodes(scenario: Scenario, request_id: str, proposal: Dispatc
     if supports and refutes:
         reason_code = "ROUTE_CONTRADICTION"
         detail = "Conflicting route reports prevent the destination route from supporting a deterministic proposal."
-        action = "OBTAIN_DISCRIMINATING_ROUTE_EVIDENCE"
+        action = VerificationAction.OBTAIN_DISCRIMINATING_ROUTE_EVIDENCE
     else:
         reason_code = "ROUTE_EVIDENCE_UNUSABLE"
         detail = "The reported destination route is not verified and fresh enough to support a deterministic proposal."
-        action = "VERIFY_CURRENT_ROUTE_STATUS"
+        action = VerificationAction.VERIFY_CURRENT_ROUTE_STATUS
     return [VerificationNode(
         request_id, proposal.status, VerificationDisposition.BLOCKED,
         reason_code, detail, action,
         ("independent_current_route_status",), supports, refutes,
         (f"No usable evidence establishes route {route_id} for this proposal.",),
     )]
+
+
+def _access_route_evidence_nodes(scenario: Scenario, request_id: str, proposal: DispatchProposal) -> list[VerificationNode]:
+    """Expose access-route evidence that prevents a candidate resource arriving."""
+    request = next(item for item in scenario.requests if item.request.request_id == request_id).request
+    nodes = []
+    for reported_resource in sorted(scenario.resources, key=lambda item: item.resource.resource_id):
+        resource = reported_resource.resource
+        if not (
+            resource.available
+            and resource.capacity >= request.people
+            and (not request.medical_need or resource.can_transport_medical)
+        ):
+            continue
+        candidates = [
+            item for item in scenario.routes
+            if item.route.origin == resource.zone and item.route.destination == request.pickup_zone
+        ]
+        if not candidates or all(route_usable(item) for item in candidates):
+            continue
+        route_id = f"{resource.zone}->{request.pickup_zone}"
+        supports = tuple(
+            _evidence("route", route_id, item.provenance, assertion="access_route_reported_open")
+            for item in candidates if item.route.open
+        )
+        refutes = tuple(
+            _evidence("route", route_id, item.provenance, assertion="access_route_reported_closed")
+            for item in candidates if not item.route.open
+        )
+        if supports and refutes:
+            reason_code = "ACCESS_ROUTE_CONTRADICTION"
+            detail = "Conflicting access-route reports prevent this resource from reaching the pickup zone."
+            action = VerificationAction.OBTAIN_DISCRIMINATING_ACCESS_ROUTE_EVIDENCE
+        else:
+            reason_code = "ACCESS_ROUTE_EVIDENCE_UNUSABLE"
+            detail = "The reported access route is not verified and fresh enough for this resource to reach the pickup zone."
+            action = VerificationAction.VERIFY_CURRENT_ACCESS_ROUTE_STATUS
+        nodes.append(VerificationNode(
+            request_id, proposal.status, VerificationDisposition.BLOCKED,
+            reason_code, detail, action,
+            ("independent_current_access_route_status",), supports, refutes,
+            (f"Resource {resource.resource_id} cannot use route {route_id} in the deterministic plan.",),
+        ))
+    return nodes
 
 
 def _reported_open_route_exists(scenario: Scenario, origin: str, destination: str) -> bool:
@@ -223,7 +294,7 @@ def _resource_evidence_nodes(scenario: Scenario, request_id: str, proposal: Disp
             request_id, proposal.status, VerificationDisposition.BLOCKED,
             "RESOURCE_EVIDENCE_UNUSABLE",
             "A resource meets the declared capacity and compatibility constraints but its availability evidence is not verified and fresh enough for planning.",
-            "VERIFY_CURRENT_RESOURCE_AVAILABILITY",
+            VerificationAction.VERIFY_CURRENT_RESOURCE_AVAILABILITY,
             ("verified_current_resource_availability",), (evidence,), (),
             (f"Resource {resource.resource_id} remains excluded from the deterministic resource pool.",),
         ))
@@ -251,7 +322,7 @@ def _shelter_evidence_nodes(scenario: Scenario, request_id: str, proposal: Dispa
             request_id, proposal.status, VerificationDisposition.BLOCKED,
             "SHELTER_EVIDENCE_UNUSABLE",
             "A destination shelter has declared capacity but its availability evidence is not verified and fresh enough for planning.",
-            "VERIFY_CURRENT_DESTINATION_CAPACITY",
+            VerificationAction.VERIFY_CURRENT_DESTINATION_CAPACITY,
             ("verified_current_destination_capacity",), (evidence,), (),
             (f"Shelter {shelter.shelter_id} remains excluded from the deterministic shelter pool.",),
         ))
@@ -292,7 +363,7 @@ def _clear_node(scenario: Scenario, request_id: str, proposal: DispatchProposal)
         request_id, proposal.status, VerificationDisposition.CLEAR,
         "EVIDENCE_GATES_CLEAR",
         "The deterministic evidence gates required for this proposal were satisfied.",
-        "HUMAN_APPROVAL_REQUIRED",
+        VerificationAction.HUMAN_APPROVAL_REQUIRED,
         (), _clear_evidence(scenario, request_id, proposal), (), (),
     )
 
@@ -325,6 +396,7 @@ def verification_payload(
         ):
             nodes.extend(_resource_evidence_nodes(scenario, proposal.request_id, proposal))
             nodes.extend(_shelter_evidence_nodes(scenario, proposal.request_id, proposal))
+            nodes.extend(_access_route_evidence_nodes(scenario, proposal.request_id, proposal))
             nodes.extend(_route_evidence_nodes(scenario, proposal.request_id, proposal))
             nodes.append(_feasibility_node(proposal.request_id, proposal))
 
@@ -342,3 +414,97 @@ def verification_payload(
             "Only reports represented in the scenario are analyzed. Unreported conditions remain outside this artifact's evidence boundary.",
         ],
     }
+
+
+def verify_payload(
+    payload: dict,
+    plan: dict,
+    *,
+    expected_plan_sha256: str,
+) -> None:
+    """Verify the domain-neutral contract beyond its cryptographic seal.
+
+    A SHA-256 seal establishes that bytes have not changed since sealing.  This
+    check establishes that those bytes still describe the plan they claim to
+    explain and have not crossed LIFELINE's no-dispatch authority boundary.
+    It deliberately validates the contract, not operational truth: a changed
+    field report must be represented in a new scenario and recomputed plan.
+    """
+    if not isinstance(payload, dict) or not isinstance(plan, dict):
+        raise VerificationError("verification payload and plan must be objects")
+    if payload.get("verification_version") != VERIFICATION_VERSION:
+        raise VerificationError("unsupported verification_version")
+    if payload.get("plan_sha256") != expected_plan_sha256:
+        raise VerificationError("verification payload is not bound to the sealed plan")
+
+    proposals = plan.get("proposals")
+    if not isinstance(proposals, list):
+        raise VerificationError("plan proposals must be a list")
+    proposal_statuses: dict[str, str] = {}
+    for proposal in proposals:
+        if not isinstance(proposal, dict):
+            raise VerificationError("plan proposal must be an object")
+        request_id = proposal.get("request_id")
+        status = proposal.get("status")
+        if not isinstance(request_id, str) or not request_id:
+            raise VerificationError("plan proposal is missing request_id")
+        if request_id in proposal_statuses:
+            raise VerificationError(f"plan has duplicate proposal for {request_id}")
+        if status not in {"PROPOSED", "NEEDS_HUMAN_REVIEW"}:
+            raise VerificationError(f"plan proposal {request_id} has unsupported status")
+        proposal_statuses[request_id] = status
+
+    nodes = payload.get("nodes")
+    if not isinstance(nodes, list):
+        raise VerificationError("verification nodes must be a list")
+    seen_node_keys: set[tuple[str, str]] = set()
+    covered_requests: set[str] = set()
+    for node in nodes:
+        if not isinstance(node, dict):
+            raise VerificationError("verification node must be an object")
+        request_id = node.get("request_id")
+        reason_code = node.get("reason_code")
+        if not isinstance(request_id, str) or request_id not in proposal_statuses:
+            raise VerificationError("verification node references no plan proposal")
+        if not isinstance(reason_code, str) or not reason_code:
+            raise VerificationError(f"verification node for {request_id} is missing reason_code")
+        node_key = (request_id, reason_code)
+        if node_key in seen_node_keys:
+            raise VerificationError(f"verification payload has duplicate node {request_id}:{reason_code}")
+        seen_node_keys.add(node_key)
+        covered_requests.add(request_id)
+
+        status = proposal_statuses[request_id]
+        if node.get("proposal_status") != status:
+            raise VerificationError(f"verification node status disagrees with plan for {request_id}")
+        disposition = node.get("disposition")
+        if disposition not in {item.value for item in VerificationDisposition}:
+            raise VerificationError(f"verification node has unsupported disposition for {request_id}")
+        if status == "PROPOSED" and disposition != VerificationDisposition.CLEAR.value:
+            raise VerificationError(f"proposed request {request_id} must have a CLEAR verification node")
+        if status == "NEEDS_HUMAN_REVIEW" and disposition != VerificationDisposition.BLOCKED.value:
+            raise VerificationError(f"review request {request_id} must have a BLOCKED verification node")
+
+        action = node.get("action_required")
+        if not isinstance(action, str) or not action:
+            raise VerificationError(f"verification node for {request_id} is missing action_required")
+        artifacts = node.get("required_artifacts")
+        if not isinstance(artifacts, list) or not all(isinstance(item, str) and item for item in artifacts):
+            raise VerificationError(f"verification node for {request_id} has invalid required_artifacts")
+        if disposition == VerificationDisposition.CLEAR.value:
+            if reason_code != "EVIDENCE_GATES_CLEAR":
+                raise VerificationError(f"clear node for {request_id} has an invalid reason_code")
+            if action != CLEAR_ACTION or artifacts:
+                raise VerificationError(f"clear node for {request_id} crosses the human-approval boundary")
+        elif action not in BLOCKED_ACTIONS:
+            raise VerificationError(f"blocked node for {request_id} has an unknown verification action")
+
+        for field in ("supports", "refutes", "unresolved"):
+            if not isinstance(node.get(field), list):
+                raise VerificationError(f"verification node for {request_id} has invalid {field}")
+
+    missing = set(proposal_statuses) - covered_requests
+    if missing:
+        raise VerificationError(
+            "verification payload omits plan proposal(s): " + ", ".join(sorted(missing))
+        )

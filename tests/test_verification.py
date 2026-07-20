@@ -1,10 +1,18 @@
 import json
 from pathlib import Path
 
-from lifeline.export import export_plan, seal_digest
+import pytest
+
+from lifeline.export import export_plan, plan_payload, seal_digest
 from lifeline.scenario import load_scenario, parse_scenario, plan_scenario
 from lifeline.validators import validate_scenario
-from lifeline.verification import verification_payload
+from lifeline.verification import (
+    BLOCKED_ACTIONS,
+    VerificationAction,
+    VerificationError,
+    verification_payload,
+    verify_payload,
+)
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -16,6 +24,14 @@ def _node(payload, request_id, reason_code):
         node for node in payload["nodes"]
         if node["request_id"] == request_id and node["reason_code"] == reason_code
     )
+
+
+def test_verification_action_vocabulary_has_one_source_of_truth():
+    assert BLOCKED_ACTIONS == {
+        action.value for action in VerificationAction
+        if action is not VerificationAction.HUMAN_APPROVAL_REQUIRED
+    }
+    assert VerificationAction.HUMAN_APPROVAL_REQUIRED.value not in BLOCKED_ACTIONS
 
 
 def test_verification_payload_exposes_explicit_request_evidence_gaps():
@@ -91,6 +107,22 @@ def test_resource_and_shelter_evidence_gaps_are_named_without_claiming_feasibili
     assert _node(payload, "family-north", "FEASIBILITY_NOT_ESTABLISHED")
 
 
+def test_access_route_contradiction_keeps_a_resource_out_of_the_plan():
+    raw = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
+    raw["routes"].append({
+        "origin": "boat-base", "destination": "north-bank", "eta_minutes": 11, "open": False,
+        "source": "patrol-10", "source_type": "responder",
+        "observed_at": "2026-07-17T09:09:00Z", "verification_state": "verified", "freshness": "high",
+    })
+    scenario, findings = validate_scenario(parse_scenario(raw))
+    payload = verification_payload(scenario, plan_scenario(scenario), findings, plan_sha256="e" * 64)
+
+    node = _node(payload, "family-north", "ACCESS_ROUTE_CONTRADICTION")
+    assert node["required_artifacts"] == ["independent_current_access_route_status"]
+    assert [item["assertion"] for item in node["supports"]] == ["access_route_reported_open"]
+    assert [item["assertion"] for item in node["refutes"]] == ["access_route_reported_closed"]
+
+
 def test_export_seals_verification_as_a_sibling_bound_to_the_plan(tmp_path):
     result = export_plan(SCENARIO_PATH, tmp_path)
     verification = json.loads((tmp_path / "verification.json").read_text(encoding="utf-8"))
@@ -99,3 +131,27 @@ def test_export_seals_verification_as_a_sibling_bound_to_the_plan(tmp_path):
     assert verification["plan_sha256"] == result.seal["sha256"]
     assert seal["plan_sha256"] == result.seal["sha256"]
     assert seal["sha256"] == seal_digest(verification)
+
+
+def test_semantic_verifier_rejects_resigned_dispatch_authority_and_plan_mismatch():
+    scenario, findings = validate_scenario(load_scenario(SCENARIO_PATH))
+    proposals = plan_scenario(scenario)
+    plan = plan_payload(scenario, proposals, findings)
+    plan_sha256 = seal_digest(plan)
+    payload = verification_payload(scenario, proposals, findings, plan_sha256=plan_sha256)
+
+    verify_payload(payload, plan, expected_plan_sha256=plan_sha256)
+
+    blocked = next(node for node in payload["nodes"] if node["proposal_status"] == "NEEDS_HUMAN_REVIEW")
+    blocked["action_required"] = "DISPATCH_NOW"
+    with pytest.raises(VerificationError, match="unknown verification action"):
+        verify_payload(payload, plan, expected_plan_sha256=plan_sha256)
+
+    blocked["action_required"] = "DEPLOY_BOAT_UNIT_7_NOW"
+    with pytest.raises(VerificationError, match="unknown verification action"):
+        verify_payload(payload, plan, expected_plan_sha256=plan_sha256)
+
+    blocked["action_required"] = "VERIFY_REQUEST_REPORT"
+    blocked["proposal_status"] = "PROPOSED"
+    with pytest.raises(VerificationError, match="status disagrees"):
+        verify_payload(payload, plan, expected_plan_sha256=plan_sha256)
