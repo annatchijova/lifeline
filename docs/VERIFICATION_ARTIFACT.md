@@ -65,6 +65,11 @@ blocked request can name, for example:
 - `FEASIBILITY_NOT_ESTABLISHED` → a human-verified feasible resource, route,
   and destination capacity.
 
+When reports for a destination route disagree, `ROUTE_CONTRADICTION` preserves
+the open and closed assertions in separate `supports` and `refutes` lists. It
+asks for `independent_current_route_status`; it does not select an alternative
+route or infer that either report is correct.
+
 The contract deliberately retains unresolved evidence rather than deriving an
 unjustified recommendation from it.
 

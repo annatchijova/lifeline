@@ -57,6 +57,23 @@ def test_stale_request_is_blocked_and_names_fresh_evidence_needed():
     assert node["action_required"] == "OBTAIN_FRESH_REQUEST_REPORT"
 
 
+def test_route_contradiction_keeps_the_open_and_closed_reports_visible():
+    raw = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
+    raw["routes"].append({
+        "origin": "north-bank", "destination": "shelter-a", "eta_minutes": 8, "open": False,
+        "source": "patrol-09", "source_type": "responder",
+        "observed_at": "2026-07-17T09:11:00Z", "verification_state": "verified", "freshness": "high",
+    })
+    scenario, findings = validate_scenario(parse_scenario(raw))
+    payload = verification_payload(scenario, plan_scenario(scenario), findings, plan_sha256="c" * 64)
+
+    node = _node(payload, "family-north", "ROUTE_CONTRADICTION")
+    assert node["action_required"] == "OBTAIN_DISCRIMINATING_ROUTE_EVIDENCE"
+    assert node["required_artifacts"] == ["independent_current_route_status"]
+    assert [item["assertion"] for item in node["supports"]] == ["route_reported_open"]
+    assert [item["assertion"] for item in node["refutes"]] == ["route_reported_closed"]
+
+
 def test_export_seals_verification_as_a_sibling_bound_to_the_plan(tmp_path):
     result = export_plan(SCENARIO_PATH, tmp_path)
     verification = json.loads((tmp_path / "verification.json").read_text(encoding="utf-8"))

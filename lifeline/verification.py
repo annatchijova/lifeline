@@ -49,9 +49,10 @@ class EvidenceReference:
     verification_state: str
     freshness: str
     observation: ObservationState = ObservationState.ANALYZED
+    assertion: str | None = None
 
     def as_dict(self) -> dict:
-        return {
+        payload = {
             "entity_type": self.entity_type,
             "entity_id": self.entity_id,
             "source": self.source,
@@ -61,6 +62,9 @@ class EvidenceReference:
             "freshness": self.freshness,
             "observation": self.observation.value,
         }
+        if self.assertion is not None:
+            payload["assertion"] = self.assertion
+        return payload
 
 
 @dataclass(frozen=True)
@@ -91,7 +95,13 @@ class VerificationNode:
         }
 
 
-def _evidence(entity_type: str, entity_id: str, provenance: Provenance) -> EvidenceReference:
+def _evidence(
+    entity_type: str,
+    entity_id: str,
+    provenance: Provenance,
+    *,
+    assertion: str | None = None,
+) -> EvidenceReference:
     return EvidenceReference(
         entity_type=entity_type,
         entity_id=entity_id,
@@ -100,6 +110,7 @@ def _evidence(entity_type: str, entity_id: str, provenance: Provenance) -> Evide
         observed_at=provenance.observed_at,
         verification_state=provenance.verification_state,
         freshness=provenance.freshness,
+        assertion=assertion,
     )
 
 
@@ -148,6 +159,40 @@ def _feasibility_node(request_id: str, proposal: DispatchProposal) -> Verificati
         ("human_verified_feasible_resource_route_and_destination_capacity",),
         (), (), reasons or ("The planner recorded a review state without a specific evidence gate.",),
     )
+
+
+def _route_evidence_nodes(scenario: Scenario, request_id: str, proposal: DispatchProposal) -> list[VerificationNode]:
+    """Expose non-usable destination-route reports without inventing a route."""
+    request = next(item for item in scenario.requests if item.request.request_id == request_id).request
+    candidates = [
+        item for item in scenario.routes
+        if item.route.origin == request.pickup_zone and item.route.destination == request.destination_zone
+    ]
+    if not candidates or all(route_usable(item) for item in candidates):
+        return []
+    route_id = f"{request.pickup_zone}->{request.destination_zone}"
+    supports = tuple(
+        _evidence("route", route_id, item.provenance, assertion="route_reported_open")
+        for item in candidates if item.route.open
+    )
+    refutes = tuple(
+        _evidence("route", route_id, item.provenance, assertion="route_reported_closed")
+        for item in candidates if not item.route.open
+    )
+    if supports and refutes:
+        reason_code = "ROUTE_CONTRADICTION"
+        detail = "Conflicting route reports prevent the destination route from supporting a deterministic proposal."
+        action = "OBTAIN_DISCRIMINATING_ROUTE_EVIDENCE"
+    else:
+        reason_code = "ROUTE_EVIDENCE_UNUSABLE"
+        detail = "The reported destination route is not verified and fresh enough to support a deterministic proposal."
+        action = "VERIFY_CURRENT_ROUTE_STATUS"
+    return [VerificationNode(
+        request_id, proposal.status, VerificationDisposition.BLOCKED,
+        reason_code, detail, action,
+        ("independent_current_route_status",), supports, refutes,
+        (f"No usable evidence establishes route {route_id} for this proposal.",),
+    )]
 
 
 def _selected_route(scenario: Scenario, origin: str, destination: str):
@@ -215,6 +260,7 @@ def verification_payload(
         if proposal.status == "NEEDS_HUMAN_REVIEW" and any(
             reason.startswith("no ") for reason in proposal.reasons
         ):
+            nodes.extend(_route_evidence_nodes(scenario, proposal.request_id, proposal))
             nodes.append(_feasibility_node(proposal.request_id, proposal))
 
     nodes.sort(key=lambda node: (node.request_id, node.reason_code))
