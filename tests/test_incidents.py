@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from lifeline.incidents import IncidentConflict, IncidentStore, _digest
+import lifeline.incidents as incident_module
+from lifeline.approvals import ApprovalChainError
+from lifeline.incidents import IncidentConflict, IncidentStore, IncidentStoreError, _digest
 from lifeline.export import seal_digest
 
 
@@ -177,3 +179,32 @@ def test_incident_approval_claim_is_atomic_across_store_instances(tmp_path):
     assert len(errors) == 1
     assert "already recorded" in str(errors[0])
     assert len(first.approvals(created.incident_id)) == 1
+
+
+def test_incident_approval_claim_rolls_back_when_ledger_append_fails(tmp_path, monkeypatch):
+    store = IncidentStore(tmp_path / "incidents.sqlite3")
+    created = store.create(_scenario())
+    plan = store.plan(created.incident_id, "2026-07-17T11:00:00Z")
+    proposal = next(item for item in plan["plan"]["proposals"] if item["status"] == "PROPOSED")
+
+    def fail_append(*args, **kwargs):
+        raise ApprovalChainError("synthetic append failure")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(incident_module, "append_entry", fail_append)
+        with pytest.raises(IncidentStoreError, match="synthetic append failure"):
+            store.record_approval(
+                created.incident_id, request_id=proposal["request_id"], action="approve",
+                approver="anna-coordinator", proposal_audit_hash=proposal["audit_hash"],
+                plan_sha256=plan["seal"]["sha256"], reference_time="2026-07-17T11:00:00Z",
+            )
+
+    with store._connect() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM incident_approval_claims").fetchone()[0] == 0
+    entry = store.record_approval(
+        created.incident_id, request_id=proposal["request_id"], action="approve",
+        approver="anna-coordinator", proposal_audit_hash=proposal["audit_hash"],
+        plan_sha256=plan["seal"]["sha256"], reference_time="2026-07-17T11:00:00Z",
+    )
+    assert entry["index"] == 0
+    assert len(store.approvals(created.incident_id)) == 1

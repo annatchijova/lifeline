@@ -196,6 +196,17 @@ def test_public_artifacts_reject_symlinks_for_get_and_head(room, tmp_path):
     assert _head(base, "/out/plan.json") == 404
 
 
+def test_public_artifacts_reject_fifos_without_blocking(room):
+    if not hasattr(os, "mkfifo"):
+        pytest.skip("FIFO files are unavailable on this platform")
+    base, _, _, out_dir, _ = room
+    (out_dir / "plan.json").unlink()
+    os.mkfifo(out_dir / "plan.json")
+
+    assert _get(base, "/out/plan.json")[0] == 404
+    assert _head(base, "/out/plan.json") == 404
+
+
 def test_serve_describes_the_actual_local_authentication_boundary(monkeypatch, capsys, tmp_path):
     class FakeServer:
         approvals_path = tmp_path / "approvals.jsonl"

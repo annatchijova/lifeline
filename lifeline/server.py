@@ -109,12 +109,13 @@ class RoomHandler(SimpleHTTPRequestHandler):
 
         Artifact names are an allowlist, but a name alone is not a filesystem
         boundary: a writable out directory could replace a permitted name with
-        a symlink.  On POSIX, O_NOFOLLOW closes the check/open race as well.
+        a symlink or FIFO. On POSIX, O_NOFOLLOW closes the check/open race and
+        O_NONBLOCK prevents a FIFO from blocking before fstat rejects it.
         """
         path = self.server.out_dir / artifact
         if path.is_symlink():
             return None
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
         try:
             descriptor = os.open(path, flags)
         except OSError:
