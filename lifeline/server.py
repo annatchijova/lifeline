@@ -140,7 +140,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
         flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
         try:
             descriptor = os.open(path, flags)
-        except OSError:
+        except (OSError, ValueError):
             return None
         info = os.fstat(descriptor)
         if not stat.S_ISREG(info.st_mode):
@@ -164,7 +164,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 os.close(directory_fd)
                 directory_fd = child_fd
             descriptor = os.open(parts[-1], file_flags, dir_fd=directory_fd)
-        except OSError:
+        except (OSError, ValueError):
             return None
         finally:
             if directory_fd is not None:

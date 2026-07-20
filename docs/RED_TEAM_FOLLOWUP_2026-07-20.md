@@ -201,3 +201,20 @@ failure at this scale. They are not a production throughput benchmark and do
 not establish behavior at thousands of events; a checkpoint/index design would
 need a stated scale requirement and a separate benchmark before changing the
 ledger verification model.
+
+## RT-10 — Percent-encoded null name drops the static-file connection
+
+**Severity:** Low
+
+**Epistemic level:** CONFIRMED BY INDUCTION
+
+**Bucket:** Software vulnerability (local availability)
+
+`_open_web_file()` correctly percent-decodes names to reject encoded traversal,
+but the decoded NUL character reached `os.open()` as an embedded null byte.
+A real `GET /web/%00` raised `ValueError` in the handler and the client
+observed `RemoteDisconnected`.
+
+The static open boundary now treats `ValueError` like an invalid filesystem
+name and returns `404`. The same regression covers GET and HEAD alongside final
+and intermediate symlinks plus percent-encoded traversal.

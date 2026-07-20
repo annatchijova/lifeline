@@ -354,6 +354,8 @@ def test_web_static_files_reject_symlinks_for_get_and_head(room, tmp_path):
         assert _head(base, "/web/linked-dir/nested-secret.txt") == 404
         assert _get(base, "/web/%2e%2e/private.txt")[0] == 404
         assert _head(base, "/web/%2e%2e/private.txt") == 404
+        assert _get(base, "/web/%00")[0] == 404
+        assert _head(base, "/web/%00") == 404
     finally:
         server.shutdown()
         server.server_close()
