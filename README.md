@@ -27,6 +27,68 @@ audit trail that cannot be quietly rewritten.
 
 > **The map is not the decision. The person is.**
 
+## LIFELINE OS
+
+LIFELINE is not only a planner and it is not an autonomous dispatch system. It
+is a local, human-led operating system for coordinating an incident from the
+first report to the final verification:
+
+```text
+incoming evidence
+      ↓
+briefing → deterministic validators → alerts
+      ↓                         ↓
+incident revisions       verification graph
+      ↓                         ↓
+planning kernel → simulations / alternatives
+      ↓
+human approval → audit ledger → export + offline verification
+```
+
+The product surface includes an incident backend, local authenticated
+coordinators, typed report ingestion, role boundaries, a live operations room,
+human briefing, deterministic planning, alternative-scenario simulation,
+approval recording, alert feeds, GeoJSON export, CRONOS-compatible tracing,
+sealed verification artifacts, and a verification CLI. The static judge demo
+is only the visible window into that larger lifecycle.
+
+## What it is useful for
+
+LIFELINE is designed for situations where many people must coordinate from
+partial, stale, or contradictory information and still be able to explain
+what happened later. Example use cases include:
+
+- **Flood response:** compare evacuation requests, boats, shelters, and route
+  reports without silently treating a rumor as a fact.
+- **Wildfire or storm coordination:** maintain incident revisions as roads,
+  resources, and shelter capacity change during an operation.
+- **Search-and-rescue staging:** expose feasible resource/request pairings while
+  leaving prioritization and dispatch authority with the coordinator.
+- **Humanitarian logistics:** record why a delivery, transfer, or shelter
+  proposal is blocked when a route, capacity claim, or source is not verified.
+- **Training and tabletop exercises:** run synthetic alternatives, inspect the
+  evidence graph, rehearse approvals, and export a reproducible incident record.
+
+In every case, the system answers: *what was reported, what was corroborated,
+what conflicts, what is missing, what could be proposed, and who approved it?*
+It does not answer: *which human life is worth more?*
+
+## Important status and safety boundary
+
+LIFELINE has a carefully tested implementation and an adversarial test suite,
+but it has **not been used in real incidents** and is not validated for live
+emergency operations. The included flood scenario, reports, identities,
+routes, capacities, and decisions are synthetic. They exist to demonstrate the
+architecture and its failure modes, not to represent real people or current
+field conditions.
+
+This repository is a research and hackathon prototype. It must not replace
+official emergency services, an incident command system, professional advice,
+or local operational procedures. A future deployment would require field
+validation, threat modeling with operators, accessibility and language review,
+identity and authorization design, resilience testing, governance, and formal
+acceptance by the responsible organization.
+
 ## Three commitments — written into the code, not just the pitch
 
 - **Facts have sources.** A request, resource, route, or shelter must be
