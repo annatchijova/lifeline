@@ -174,3 +174,30 @@ A per-connection deadline bounds how long one incomplete request holds one
 handler. It does not impose a global connection quota, rate limit, or
 production reverse-proxy policy. Those are deployment hardening concerns
 outside this local prototype's current authority model.
+
+## Discarded capacity vector — full-ledger verification on each write
+
+**Epistemic level:** FALSIFIED as an immediate capacity finding
+
+`IncidentStore.add_report()` verifies the current event chain before it writes
+the next revision, so cumulative cost is expected to rise with history length.
+The discriminating question was whether that cost is already a practical
+fracture for the local prototype.
+
+On Python 3.12 with a fresh SQLite database and the bundled flood scenario,
+the following synthetic verified-request additions completed successfully:
+
+| Additions | Total time | Mean per write |
+| ---: | ---: | ---: |
+| 10 | 0.033 s | 0.0033 s |
+| 20 | 0.069 s | 0.0035 s |
+| 40 | 0.152 s | 0.0038 s |
+| 100 | 0.446 s | 0.0045 s |
+| 200 | 1.127 s | 0.0056 s |
+| 400 | 3.260 s | 0.0081 s |
+
+The data corroborate cumulative growth but do not demonstrate an operational
+failure at this scale. They are not a production throughput benchmark and do
+not establish behavior at thousands of events; a checkpoint/index design would
+need a stated scale requirement and a separate benchmark before changing the
+ledger verification model.
