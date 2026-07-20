@@ -96,6 +96,10 @@ class OperatorStore:
             raise AuthError("the initial operator must be an admin")
         operator, token, salt, verifier = self._create(operator_id, role)
         with self._connect() as conn:
+            # The empty-registry observation and first insert are one critical
+            # section. This prevents two local bootstrap processes from both
+            # creating an initial administrator.
+            conn.execute("BEGIN IMMEDIATE")
             if conn.execute("SELECT 1 FROM operators LIMIT 1").fetchone() is not None:
                 raise AuthError("an operator registry already exists; bootstrap is refused")
             conn.execute(
