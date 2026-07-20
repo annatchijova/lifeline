@@ -140,6 +140,11 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
       <div id="simlist"></div>
       <p id="simlimits" style="margin:8px 0 0;font-size:.8rem;color:var(--muted)"></p>
     </div>
+    <div id="verification" style="display:none;margin-top:18px;padding:11px;border:1px solid rgba(90,176,234,.45);border-radius:9px;font-size:.9rem;color:var(--muted)">
+      <b style="color:var(--water);display:block;margin-bottom:5px;font-size:.85rem;letter-spacing:.08em" data-en="VERIFICATION GRAPH — EVIDENCE BEFORE NARRATIVE" data-es="GRAFO DE VERIFICACIÓN — EVIDENCIA ANTES QUE NARRATIVA">VERIFICATION GRAPH — EVIDENCE BEFORE NARRATIVE</b>
+      <p id="verification-summary" style="margin:5px 0 10px"></p>
+      <div id="verification-list"></div>
+    </div>
     <div id="humanlog"><b data-en="PENDING HUMAN ACTION LOG (LOCAL ONLY)" data-es="REGISTRO LOCAL DE ACCIONES HUMANAS PENDIENTES">PENDING HUMAN ACTION LOG (LOCAL ONLY)</b><div id="loglist"></div></div>
   </aside>
 </main>
@@ -161,9 +166,9 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
   const w = (en, es) => (root.dataset.language === "es" ? es : en);
 
   const state = {
-    room: null, plan: null, seal: null, sim: null, isDemo,
+    room: null, plan: null, seal: null, verification: null, verificationSeal: null, sim: null, isDemo,
     decisions: {}, log: [], apiMode: false, planSha: null, planIntegrity: "unknown",
-    chain: null, popupLayers: [], legend: null,
+    verificationIntegrity: "unknown", chain: null, popupLayers: [], legend: null,
   };
 
   function setLanguage(language) {
@@ -492,6 +497,63 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     document.getElementById("simlimits").textContent = (state.sim.limitations || []).join(" · ");
   }
 
+  function evidenceLine(items, emptyLabel) {
+    if (!items || !items.length) return `<span style="color:var(--muted)">${esc(emptyLabel)}</span>`;
+    return items.map(item => {
+      const observation = item.observation ? ` · ${item.observation}` : "";
+      const assertion = item.assertion ? ` · ${item.assertion}` : "";
+      return `<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 5px;border:1px solid var(--line);border-radius:5px;font-size:.78rem">${esc(item.entity_type)}:${esc(item.entity_id)} · ${esc(item.source)}${esc(observation)}${esc(assertion)}</span>`;
+    }).join("");
+  }
+
+  function renderVerification() {
+    const box = document.getElementById("verification");
+    const payload = state.verification;
+    if (!payload || !Array.isArray(payload.nodes)) { box.style.display = "none"; return; }
+    box.style.display = "block";
+    const nodes = payload.nodes;
+    const blocked = nodes.filter(node => node.disposition === "BLOCKED").length;
+    const clear = nodes.filter(node => node.disposition === "CLEAR").length;
+    const sealNote = state.verificationIntegrity === "pass"
+      ? w("independent verification seal verified", "sello independiente de verificación verificado")
+      : state.verificationIntegrity === "fail"
+        ? w("verification seal failed", "falló el sello de verificación")
+        : w("verification seal unavailable", "sello de verificación no disponible");
+    document.getElementById("verification-summary").textContent = `${clear} ${w("clear evidence paths", "caminos de evidencia claros")} · ${blocked} ${w("blocked paths", "caminos bloqueados")} · ${sealNote}`;
+    const list = document.getElementById("verification-list");
+    list.innerHTML = "";
+    const routeGroups = {};
+    (state.room && state.room.features || []).filter(feature => feature.properties.feature_type === "route").forEach(feature => {
+      const props = feature.properties;
+      const key = `${props.origin}->${props.destination}`;
+      (routeGroups[key] ||= []).push(props);
+    });
+    const contradictions = Object.entries(routeGroups).filter(([, reports]) => {
+      const states = new Set(reports.map(report => report.reported_open));
+      return states.has(true) && states.has(false);
+    });
+    if (contradictions.length) {
+      const dispute = document.createElement("div");
+      dispute.style.cssText = "margin:0 0 10px;padding:9px;border:1px solid rgba(255,90,96,.65);border-radius:7px;background:rgba(255,90,96,.1)";
+      dispute.innerHTML = `<b style="color:var(--coral)">${w("CONTRADICTORY OBSERVATIONS REMAIN VISIBLE", "LAS OBSERVACIONES CONTRADICTORIAS SIGUEN VISIBLES")}</b><br><span style="font-size:.8rem">${contradictions.map(([route, reports]) => `${esc(route)}: ${reports.filter(report => report.reported_open).length} ${w("open", "abiertas")} / ${reports.filter(report => !report.reported_open).length} ${w("closed", "cerradas")}`).join(" · ")}</span>`;
+      list.appendChild(dispute);
+    }
+    nodes.forEach(node => {
+      const card = document.createElement("article");
+      const isBlocked = node.disposition === "BLOCKED";
+      card.style.cssText = `margin:8px 0;padding:9px;border-left:3px solid ${isBlocked ? "var(--gold)" : "var(--green)"};background:${isBlocked ? "rgba(255,178,36,.08)" : "rgba(63,199,106,.08)"};border-radius:0 7px 7px 0`;
+      const supports = evidenceLine(node.supports, w("none recorded", "ninguno registrado"));
+      const refutes = evidenceLine(node.refutes, w("none recorded", "ninguno registrado"));
+      const artifacts = node.required_artifacts && node.required_artifacts.length
+        ? node.required_artifacts.map(esc).join(" · ") : w("none — human approval is the remaining boundary", "ninguno — la aprobación humana es el límite restante");
+      const unresolved = node.unresolved && node.unresolved.length ? node.unresolved.map(esc).join(" · ") : w("none", "ninguno");
+      card.innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><b>${esc(node.request_id)} · ${esc(node.reason_code)}</b><span style="color:${isBlocked ? "var(--gold)" : "var(--green)"};font-weight:800">${esc(node.disposition)}</span></div>
+        <p style="margin:5px 0">${esc(node.detail)}</p>
+        <div style="font-size:.8rem;line-height:1.55"><b>${w("action", "acción")}</b>: ${esc(node.action_required)}<br><b>${w("supports", "sostiene")}</b>: ${supports}<br><b>${w("refutes", "refuta")}</b>: ${refutes}<br><b>${w("required artifacts", "artefactos requeridos")}</b>: ${artifacts}<br><b>${w("unresolved", "sin resolver")}</b>: ${unresolved}</div>`;
+      list.appendChild(card);
+    });
+  }
+
   function renderLog() {
     const list = document.getElementById("loglist");
     list.innerHTML = "";
@@ -542,6 +604,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     renderProposals();
     renderFindings();
     renderSimulation();
+    renderVerification();
     renderLog();
     renderSealinfo();
     renderLegend();
@@ -576,10 +639,12 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
 
   async function boot() {
     try {
-      [state.room, state.plan, state.seal] = await Promise.all([
+      [state.room, state.plan, state.seal, state.verification, state.verificationSeal] = await Promise.all([
         fetch(`${artifactRoot}/room.geojson`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
         fetch(`${artifactRoot}/plan.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
         fetch(`${artifactRoot}/plan.seal.json`).then(r => r.ok ? r.json() : null),
+        fetch(`${artifactRoot}/verification.json`).then(r => r.ok ? r.json() : null),
+        fetch(`${artifactRoot}/verification.seal.json`).then(r => r.ok ? r.json() : null),
       ]);
     } catch {
       const bundled = window.LIFELINE_BUNDLED_DEMO;
@@ -587,6 +652,8 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
         state.room = bundled.room;
         state.plan = bundled.plan;
         state.seal = bundled.seal;
+        state.verification = bundled.verification;
+        state.verificationSeal = bundled.verificationSeal;
       } else if (!isDemo) {
         window.location.replace("room.html?mode=demo&missing=live");
         return;
@@ -605,6 +672,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
         "No se encontró una exportación local, así que estás viendo la demo sintética incluida. Generá una exportación y después abrí “mi sala exportada” para inspeccionarla.");
     }
     state.planIntegrity = await verifyPlanSeal(state.plan, state.seal);
+    state.verificationIntegrity = await verifyPlanSeal(state.verification, state.verificationSeal);
     if (state.planIntegrity === "fail") {
       notice.style.display = "block";
       notice.textContent = w(
