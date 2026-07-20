@@ -8,6 +8,7 @@ import lifeline.incidents as incident_module
 from lifeline.approvals import ApprovalChainError
 from lifeline.incidents import IncidentConflict, IncidentStore, IncidentStoreError, _digest
 from lifeline.export import seal_digest
+from lifeline.verification import verify_payload
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -128,6 +129,8 @@ def test_incident_approval_is_bound_to_the_sealed_persisted_revision(tmp_path):
     assert plan["verification_seal"]["plan_sha256"] == plan["seal"]["sha256"]
     assert plan["verification_seal"]["sha256"] == seal_digest(plan["verification"])
     assert plan["verification"]["incident_revision"] == created.revision
+    verify_payload(
+        plan["verification"], plan["plan"], expected_plan_sha256=plan["seal"]["sha256"])
     proposal = next(item for item in plan["plan"]["proposals"] if item["status"] == "PROPOSED")
 
     entry = store.record_approval(

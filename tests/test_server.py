@@ -107,7 +107,29 @@ def _raw_approval_request(base, token, content_length: str) -> bytes:
     ).encode("ascii")
     with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
         client.sendall(request)
-        return client.recv(4096)
+        return _receive_all(client)
+
+
+def _receive_all(client: socket.socket) -> bytes:
+    chunks = []
+    while chunk := client.recv(4096):
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def _incomplete_unauthenticated_report_request(base) -> bytes:
+    port = int(base.rsplit(":", 1)[1])
+    request = (
+        "POST /api/incidents/not-disclosed/reports HTTP/1.1\r\n"
+        f"Host: 127.0.0.1:{port}\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: 2\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode("ascii")
+    with socket.create_connection(("127.0.0.1", port), timeout=2) as client:
+        client.settimeout(0.5)
+        client.sendall(request)
+        return _receive_all(client)
 
 
 def test_records_approval_and_rejects_duplicate(room):
@@ -141,6 +163,14 @@ def test_rejects_non_numeric_content_length_with_a_controlled_response(room):
 
     assert response.startswith(b"HTTP/1.0 400")
     assert b"Content-Length must be an integer" in response
+
+
+def test_unauthenticated_incident_report_is_rejected_before_reading_its_body(room):
+    base, _, _, _, _ = room
+    response = _incomplete_unauthenticated_report_request(base)
+
+    assert response.startswith(b"HTTP/1.0 401")
+    assert b"a bearer token is required" in response
 
 
 def test_rejects_stale_plan_and_stale_proposal(room):

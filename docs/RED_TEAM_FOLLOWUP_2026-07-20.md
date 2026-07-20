@@ -64,3 +64,47 @@ cross the dispatch-authority boundary.
 This finding requires an already authenticated local coordinator. It is not a
 remote unauthenticated denial of service claim. Slow-client resource limits are
 separate hardening work and were not exercised in this focused pass.
+
+## RT-07 — Incident subroutes read the body before authorization
+
+**Severity:** Low
+
+**Epistemic level:** CONFIRMED BY INDUCTION
+
+**Bucket:** Software vulnerability (local availability)
+
+### Surprise
+
+An unauthenticated caller should be rejected before the server waits for an
+untrusted request body. Otherwise a local process can hold handler threads by
+declaring a small body and never sending it.
+
+### Code fact
+
+At the vulnerable base `51cdef4`, `_post_incident()` called `_json_body()`
+before its action-specific `_operator(...)` check. The top-level
+`POST /api/incidents` path already used the safer order, but the nested
+`/api/incidents/{id}/...` paths did not.
+
+### Deduction and induction
+
+An unauthenticated `POST /api/incidents/not-disclosed/reports` declaring
+`Content-Length: 2` with no body should not receive a response while the server
+waits for those bytes. A real loopback socket test timed out after 0.5 seconds,
+confirming the prediction. Once the client disconnected, the old handler also
+attempted to send its eventual 400 response to a closed socket.
+
+### Fix and regression
+
+Each nested incident action now authenticates and authorizes before calling
+`_json_body()`. The same incomplete unauthenticated request receives `401`
+immediately; the regression is socket-level and asserts the bearer-token
+message as well as the status code.
+
+## Scope note after RT-07
+
+The fix prevents unauthenticated callers from occupying a handler while the
+body is read. A caller that already has a valid role token can still be a slow
+client, because this stdlib prototype intentionally has no global connection
+quota or request-read deadline. That is a separate local hardening question,
+not evidence that RT-07 remains bypassable.

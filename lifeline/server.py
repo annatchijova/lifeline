@@ -373,9 +373,9 @@ class RoomHandler(SimpleHTTPRequestHandler):
     def _post_incident(self, clean: str) -> None:
         try:
             incident_id, action = self._incident_path(clean)
-            body = self._json_body()
             if action == "reports":
                 self._operator("reporter")
+                body = self._json_body()
                 entity_type = body.get("entity_type")
                 report = body.get("report")
                 if not isinstance(entity_type, str):
@@ -385,6 +385,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             if action == "corrections":
                 self._operator("coordinator")
+                body = self._json_body()
                 entity_type = body.get("entity_type")
                 report = body.get("report")
                 if not isinstance(entity_type, str):
@@ -394,6 +395,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             if action == "plan":
                 self._operator("reader")
+                body = self._json_body()
                 reference_time = body.get("reference_time")
                 if reference_time is not None and not isinstance(reference_time, str):
                     raise ApiError(400, "reference_time must be a string or null")
@@ -401,6 +403,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             if action == "approvals":
                 operator = self._operator("coordinator")
+                body = self._json_body()
                 for field in ("request_id", "action", "proposal_audit_hash", "plan_sha256"):
                     if not isinstance(body.get(field), str) or not body[field].strip():
                         raise ApiError(400, f"field '{field}' must be a non-empty string")
