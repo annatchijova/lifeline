@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from lifeline.core import DispatchProposal
-from lifeline.scenario import Provenance, Scenario, route_usable
+from lifeline.scenario import Provenance, Scenario, operational_evidence_usable, route_usable
 from lifeline.validators import Finding
 
 VERIFICATION_VERSION = 1
@@ -195,6 +195,69 @@ def _route_evidence_nodes(scenario: Scenario, request_id: str, proposal: Dispatc
     )]
 
 
+def _reported_open_route_exists(scenario: Scenario, origin: str, destination: str) -> bool:
+    return any(
+        item.route.origin == origin and item.route.destination == destination and item.route.open
+        for item in scenario.routes
+    )
+
+
+def _resource_evidence_nodes(scenario: Scenario, request_id: str, proposal: DispatchProposal) -> list[VerificationNode]:
+    request = next(item for item in scenario.requests if item.request.request_id == request_id).request
+    nodes = []
+    for reported in sorted(scenario.resources, key=lambda item: item.resource.resource_id):
+        resource = reported.resource
+        factual_candidate = (
+            resource.available
+            and resource.capacity >= request.people
+            and (not request.medical_need or resource.can_transport_medical)
+            and _reported_open_route_exists(scenario, resource.zone, request.pickup_zone)
+        )
+        if not factual_candidate or operational_evidence_usable(reported.provenance):
+            continue
+        evidence = _evidence(
+            "resource", resource.resource_id, reported.provenance,
+            assertion="resource_reported_available",
+        )
+        nodes.append(VerificationNode(
+            request_id, proposal.status, VerificationDisposition.BLOCKED,
+            "RESOURCE_EVIDENCE_UNUSABLE",
+            "A resource meets the declared capacity and compatibility constraints but its availability evidence is not verified and fresh enough for planning.",
+            "VERIFY_CURRENT_RESOURCE_AVAILABILITY",
+            ("verified_current_resource_availability",), (evidence,), (),
+            (f"Resource {resource.resource_id} remains excluded from the deterministic resource pool.",),
+        ))
+    return nodes
+
+
+def _shelter_evidence_nodes(scenario: Scenario, request_id: str, proposal: DispatchProposal) -> list[VerificationNode]:
+    request = next(item for item in scenario.requests if item.request.request_id == request_id).request
+    nodes = []
+    for reported in sorted(scenario.shelters, key=lambda item: item.shelter.shelter_id):
+        shelter = reported.shelter
+        factual_candidate = (
+            shelter.open
+            and shelter.zone == request.destination_zone
+            and shelter.beds_open >= request.people
+            and _reported_open_route_exists(scenario, request.pickup_zone, shelter.zone)
+        )
+        if not factual_candidate or operational_evidence_usable(reported.provenance):
+            continue
+        evidence = _evidence(
+            "shelter", shelter.shelter_id, reported.provenance,
+            assertion="shelter_reported_capacity_available",
+        )
+        nodes.append(VerificationNode(
+            request_id, proposal.status, VerificationDisposition.BLOCKED,
+            "SHELTER_EVIDENCE_UNUSABLE",
+            "A destination shelter has declared capacity but its availability evidence is not verified and fresh enough for planning.",
+            "VERIFY_CURRENT_DESTINATION_CAPACITY",
+            ("verified_current_destination_capacity",), (evidence,), (),
+            (f"Shelter {shelter.shelter_id} remains excluded from the deterministic shelter pool.",),
+        ))
+    return nodes
+
+
 def _selected_route(scenario: Scenario, origin: str, destination: str):
     candidates = [
         item for item in scenario.routes
@@ -260,6 +323,8 @@ def verification_payload(
         if proposal.status == "NEEDS_HUMAN_REVIEW" and any(
             reason.startswith("no ") for reason in proposal.reasons
         ):
+            nodes.extend(_resource_evidence_nodes(scenario, proposal.request_id, proposal))
+            nodes.extend(_shelter_evidence_nodes(scenario, proposal.request_id, proposal))
             nodes.extend(_route_evidence_nodes(scenario, proposal.request_id, proposal))
             nodes.append(_feasibility_node(proposal.request_id, proposal))
 

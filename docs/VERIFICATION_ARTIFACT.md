@@ -70,6 +70,13 @@ the open and closed assertions in separate `supports` and `refutes` lists. It
 asks for `independent_current_route_status`; it does not select an alternative
 route or infer that either report is correct.
 
+`RESOURCE_EVIDENCE_UNUSABLE` and `SHELTER_EVIDENCE_UNUSABLE` are emitted only
+when the reported resource or shelter meets the declared factual constraints
+but is excluded by verification state or freshness. A purely physical shortfall
+(for example, no vehicle with sufficient capacity) remains an explicit
+`FEASIBILITY_NOT_ESTABLISHED` limit; the artifact does not imply that an
+unverified report would make it feasible.
+
 The contract deliberately retains unresolved evidence rather than deriving an
 unjustified recommendation from it.
 

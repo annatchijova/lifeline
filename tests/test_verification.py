@@ -74,6 +74,23 @@ def test_route_contradiction_keeps_the_open_and_closed_reports_visible():
     assert [item["assertion"] for item in node["refutes"]] == ["route_reported_closed"]
 
 
+def test_resource_and_shelter_evidence_gaps_are_named_without_claiming_feasibility():
+    raw = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
+    raw["resources"][0]["verification_state"] = "unverified"
+    raw["shelters"][0]["freshness"] = "low"
+    scenario = parse_scenario(raw)
+    payload = verification_payload(scenario, plan_scenario(scenario), (), plan_sha256="d" * 64)
+
+    resource = _node(payload, "family-north", "RESOURCE_EVIDENCE_UNUSABLE")
+    assert resource["required_artifacts"] == ["verified_current_resource_availability"]
+    assert resource["supports"][0]["assertion"] == "resource_reported_available"
+
+    shelter = _node(payload, "family-north", "SHELTER_EVIDENCE_UNUSABLE")
+    assert shelter["required_artifacts"] == ["verified_current_destination_capacity"]
+    assert shelter["supports"][0]["assertion"] == "shelter_reported_capacity_available"
+    assert _node(payload, "family-north", "FEASIBILITY_NOT_ESTABLISHED")
+
+
 def test_export_seals_verification_as_a_sibling_bound_to_the_plan(tmp_path):
     result = export_plan(SCENARIO_PATH, tmp_path)
     verification = json.loads((tmp_path / "verification.json").read_text(encoding="utf-8"))
