@@ -590,6 +590,12 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     const bound = artifact && state.seal && state.verificationSeal
       && artifact.plan_sha256 === state.seal.sha256
       && artifact.verification_sha256 === state.verificationSeal.sha256;
+    const sealBound = state.agentSeal && state.seal && state.verificationSeal
+      && state.agentSeal.canonicalize_version === 1
+      && state.agentSeal.agent_briefing_version === 4
+      && state.agentSeal.seal_version === 2
+      && state.agentSeal.plan_sha256 === state.seal.sha256
+      && state.agentSeal.verification_sha256 === state.verificationSeal.sha256;
     if (!artifact || !narration) {
       const note = document.createElement("p");
       note.style.margin = "5px 0";
@@ -599,7 +605,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
       content.appendChild(note);
       return;
     }
-    if (artifact.agent_briefing_version !== 4 || artifact.authority_boundary !== "INTERPRETIVE_ONLY" || !bound || state.agentIntegrity !== "pass") {
+    if (artifact.agent_briefing_version !== 4 || artifact.authority_boundary !== "INTERPRETIVE_ONLY" || !bound || !sealBound || state.agentIntegrity !== "pass") {
       const warning = document.createElement("p");
       warning.style.cssText = "margin:5px 0;color:var(--coral);font-weight:700";
       warning.textContent = w(
