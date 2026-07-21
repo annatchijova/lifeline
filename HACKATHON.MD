@@ -41,6 +41,7 @@ the evidence for the technical claims. See
 ## Public judge links
 
 - [LIFELINE landing page](https://lifeline-openai-hackathon.vercel.app/index.html)
+- [LIFELINE architecture and evidence companion](https://annatchijova.github.io/vigia/lifeline.html)
 - [Sealed synthetic flood-map demo](https://lifeline-openai-hackathon.vercel.app/room.html?mode=demo)
 - [Demo fallback path](https://lifeline-openai-hackathon.vercel.app/room.html?mode=demo&missing=live)
 - [Operations-console interface](https://lifeline-openai-hackathon.vercel.app/ops.html)
@@ -59,8 +60,9 @@ visible without placing a provider key or incident backend on Vercel.
 
 ## How to review the public demo
 
-1. Open the landing page. It separates the synthetic judge demo, a local
-   sealed export, and local operations.
+1. Open the landing page and the architecture/evidence companion. Together,
+   they show the synthetic judge demo, the system boundaries, the local sealed
+   export path, and the evidence behind the implementation.
 2. Open the synthetic flood-map demo. Inspect the briefing, map, proposals,
    validator findings, Verification Graph, alternatives, and local-only human
    approval controls.

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIFELINE — System Architecture</title>
+<style>
+  :root{
+    --bg:#0a0f16;
+    --bg2:#0e1520;
+    --ink:#e7eef7;
+    --muted:#93a4b8;
+    --line:#243141;
+
+    --det:#2bc4cc;        /* deterministic core  */
+    --det-bg:#0c2f38;
+    --det-bd:#1c6d76;
+
+    --human:#c79cff;      /* human authority     */
+    --human-bg:#2c1a44;
+    --human-bd:#6a3fa0;
+
+    --agent:#e6b84a;      /* optional agent      */
+    --agent-bg:#332711;
+    --agent-bd:#8a6d1f;
+
+    --ui:#8fa6c2;         /* browser surfaces    */
+    --ui-bg:#161f2c;
+    --ui-bd:#33465e;
+
+    --seal:#4bdc8f;       /* persistence / seals */
+    --seal-bg:#0e2c1f;
+    --seal-bd:#1e6b47;
+
+    --stop:#ff6b6b;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:
+      radial-gradient(1100px 600px at 15% -10%, #10202c 0%, transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, #16121f 0%, transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+    padding:40px 28px 64px;
+  }
+  .wrap{max-width:1180px;margin:0 auto}
+
+  /* ---------- header ---------- */
+  header{margin-bottom:26px}
+  .kicker{
+    font-size:12px;letter-spacing:.28em;text-transform:uppercase;
+    color:var(--det);font-weight:600;margin-bottom:10px;
+  }
+  h1{
+    font-size:40px;line-height:1.02;margin:0 0 8px;font-weight:800;letter-spacing:-.02em;
+  }
+  .tag{color:var(--muted);font-size:16px;max-width:760px;margin:0}
+  .creed{
+    margin-top:16px;padding:10px 16px;border-left:3px solid var(--human);
+    background:linear-gradient(90deg,rgba(199,156,255,.10),transparent);
+    color:#efe6ff;font-weight:600;font-size:15px;border-radius:0 8px 8px 0;
+  }
+
+  /* ---------- legend ---------- */
+  .legend{display:flex;flex-wrap:wrap;gap:10px 18px;margin:22px 0 6px}
+  .lg{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+  .dot{width:12px;height:12px;border-radius:3px;flex:0 0 auto}
+
+  /* ---------- layer scaffold ---------- */
+  .layer{
+    position:relative;border:1px solid var(--line);border-radius:16px;
+    background:linear-gradient(180deg,rgba(255,255,255,.015),transparent);
+    padding:16px 18px 18px;margin:0 0 14px;
+  }
+  .layer > .ltitle{
+    position:absolute;top:-10px;left:16px;font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;font-weight:700;padding:2px 10px;border-radius:20px;
+    background:var(--bg2);border:1px solid var(--line);color:var(--muted);
+  }
+  .row{display:flex;gap:12px;flex-wrap:wrap}
+  .row.tight{gap:10px}
+
+  /* ---------- node cards ---------- */
+  .card{
+    flex:1 1 170px;min-width:150px;border-radius:12px;padding:12px 13px;
+    border:1px solid var(--line);background:var(--bg2);
+  }
+  .card .fn{font-size:11px;color:var(--muted);font-family:"SFMono-Regular",Consolas,monospace;margin-bottom:3px}
+  .card .nm{font-weight:700;font-size:14.5px;margin-bottom:4px}
+  .card .ds{font-size:12px;color:var(--muted);line-height:1.35}
+
+  .c-det{border-color:var(--det-bd);background:linear-gradient(180deg,var(--det-bg),#0a1a20)}
+  .c-det .fn{color:var(--det)}
+  .c-ui{border-color:var(--ui-bd);background:linear-gradient(180deg,var(--ui-bg),#0d1622)}
+  .c-ui .fn{color:var(--ui)}
+  .c-seal{border-color:var(--seal-bd);background:linear-gradient(180deg,var(--seal-bg),#08221a)}
+  .c-seal .fn{color:var(--seal)}
+  .c-human{border-color:var(--human-bd);background:linear-gradient(180deg,var(--human-bg),#180f26)}
+  .c-human .fn{color:var(--human)}
+  .c-agent{border-color:var(--agent-bd);background:linear-gradient(180deg,var(--agent-bg),#231a0b)}
+  .c-agent .fn{color:var(--agent)}
+
+  /* ---------- boundary framing ---------- */
+  .boundary{border-width:1.5px}
+  .b-det{border-color:var(--det-bd)}
+  .b-human{border-color:var(--human-bd);box-shadow:0 0 0 1px rgba(199,156,255,.12) inset}
+  .b-agent{border-color:var(--agent-bd);border-style:dashed}
+  .b-det > .ltitle{color:var(--det);border-color:var(--det-bd)}
+  .b-human > .ltitle{color:var(--human);border-color:var(--human-bd)}
+  .b-agent > .ltitle{color:var(--agent);border-color:var(--agent-bd)}
+
+  /* ---------- flow connector ---------- */
+  .flow{display:flex;justify-content:center;margin:-6px 0 8px;color:var(--muted)}
+  .flow span{
+    font-size:11px;letter-spacing:.06em;display:inline-flex;align-items:center;gap:8px;
+    padding:3px 12px;border:1px dashed var(--line);border-radius:20px;background:var(--bg);
+  }
+  .arrow{color:var(--det);font-size:14px;line-height:1}
+
+  .sublabel{font-size:11.5px;color:var(--muted);margin:2px 2px 10px}
+
+  /* ---------- lifecycle strip ---------- */
+  .life{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:6px 0 4px}
+  .step{
+    flex:1 1 0;min-width:120px;position:relative;padding:12px 14px 12px 18px;
+    border:1px solid var(--det-bd);border-right:none;background:linear-gradient(180deg,var(--det-bg),#0a1a20);
+  }
+  .step:first-child{border-radius:12px 0 0 12px}
+  .step:last-child{border-right:1px solid;border-radius:0 12px 12px 0}
+  .step.human{border-color:var(--human-bd);background:linear-gradient(180deg,var(--human-bg),#180f26)}
+  .step.seal{border-color:var(--seal-bd);background:linear-gradient(180deg,var(--seal-bg),#08221a)}
+  .step .st-n{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.1em}
+  .step .st-t{font-weight:700;font-size:13px;margin:3px 0 2px}
+  .step .st-d{font-size:11px;color:var(--muted)}
+  .step::after{
+    content:"›";position:absolute;right:-8px;top:50%;transform:translateY(-50%);
+    z-index:2;color:var(--muted);font-size:20px;font-weight:800;
+  }
+  .step:last-child::after{content:""}
+
+  /* ---------- stop banner ---------- */
+  .stopbar{
+    margin-top:6px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:center;
+    padding:12px 16px;border:1px solid #52242a;border-radius:12px;
+    background:linear-gradient(90deg,rgba(255,107,107,.08),rgba(255,107,107,.03));
+    font-size:13px;color:#ffd9d9;text-align:center;
+  }
+  .stopbar b{color:#ff9a9a}
+
+  /* ---------- guarantees footer ---------- */
+  .guar{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+  .g{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:var(--bg2)}
+  .g h4{margin:0 0 5px;font-size:13px;display:flex;align-items:center;gap:7px}
+  .g p{margin:0;font-size:11.5px;color:var(--muted);line-height:1.4}
+  .g .pin{width:9px;height:9px;border-radius:2px;display:inline-block}
+
+  footer{margin-top:26px;color:var(--muted);font-size:11.5px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+  code{font-family:"SFMono-Regular",Consolas,monospace;color:var(--det);font-size:.92em}
+
+  @media (max-width:720px){
+    h1{font-size:30px}
+    .guar{grid-template-columns:1fr}
+    .step{flex-basis:45%}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="kicker">System Architecture</div>
+    <h1>LIFELINE</h1>
+    <p class="tag">A local, human-led operating system for coordinating a disaster incident — from the first
+    field report to a sealed decision anyone can verify offline. It produces <b>proposals</b>, never dispatches.</p>
+    <div class="creed">The map is not the decision. The person is.</div>
+
+    <div class="legend">
+      <div class="lg"><span class="dot" style="background:var(--det)"></span>Deterministic core</div>
+      <div class="lg"><span class="dot" style="background:var(--seal)"></span>Persistence &amp; seals</div>
+      <div class="lg"><span class="dot" style="background:var(--human)"></span>Human authority boundary</div>
+      <div class="lg"><span class="dot" style="background:var(--agent)"></span>Optional agent boundary (read-only)</div>
+      <div class="lg"><span class="dot" style="background:var(--ui)"></span>Browser surfaces</div>
+    </div>
+  </header>
+
+  <!-- ============ LIFECYCLE STRIP ============ -->
+  <div class="layer">
+    <span class="ltitle">Incident lifecycle</span>
+    <div class="life">
+      <div class="step"><div class="st-n">01 · EVIDENCE</div><div class="st-t">Typed reports</div><div class="st-d">requests · resources · shelters · routes, each with full provenance</div></div>
+      <div class="step"><div class="st-n">02 · VALIDATE</div><div class="st-t">Deterministic gates</div><div class="st-d">freshness · contradiction · duplicate — downgrade only</div></div>
+      <div class="step"><div class="st-n">03 · REVISE</div><div class="st-t">Incident revisions</div><div class="st-d">append-only, hash-linked ledger</div></div>
+      <div class="step"><div class="st-n">04 · PLAN</div><div class="st-t">Planning kernel</div><div class="st-d">eligible proposals from hard constraints</div></div>
+      <div class="step human"><div class="st-n">05 · DECIDE</div><div class="st-t">Human approval</div><div class="st-d">authenticated coordinator approves / rejects</div></div>
+      <div class="step seal"><div class="st-n">06 · SEAL</div><div class="st-t">Audit + verify</div><div class="st-d">hash-chained ledger · offline CLI checks</div></div>
+    </div>
+  </div>
+
+  <!-- ============ BROWSER SURFACES ============ -->
+  <div class="layer">
+    <span class="ltitle">Browser surfaces · web/</span>
+    <div class="row">
+      <div class="card c-ui"><div class="fn">index.html</div><div class="nm">Landing</div><div class="ds">Bilingual judge landing page</div></div>
+      <div class="card c-ui"><div class="fn">room.html</div><div class="nm">Incident room</div><div class="ds">Map, proposal states, Verification Graph, simulations</div></div>
+      <div class="card c-ui"><div class="fn">ops.html</div><div class="nm">Ops console</div><div class="ds">Authenticated: create incidents, append reports, record decisions</div></div>
+      <div class="card c-ui"><div class="fn">demo/</div><div class="nm">Sealed bundle</div><div class="ds">Static synthetic demo — no key, no backend</div></div>
+    </div>
+  </div>
+
+  <div class="flow"><span>authenticated API &nbsp;<i class="arrow">↓</i>&nbsp; reads sealed artifacts</span></div>
+
+  <!-- ============ ENTRYPOINTS ============ -->
+  <div class="layer">
+    <span class="ltitle">Entrypoints</span>
+    <div class="row">
+      <div class="card c-det"><div class="fn">__main__.py</div><div class="nm">CLI</div><div class="ds">plan · verify · serve · operator · narrate</div></div>
+      <div class="card c-det"><div class="fn">server.py</div><div class="nm">Loopback backend</div><div class="ds">Incident-room API, bound to localhost only</div></div>
+    </div>
+  </div>
+
+  <div class="flow"><span><i class="arrow">↓</i>&nbsp; deterministic pipeline</span></div>
+
+  <!-- ============ DETERMINISTIC CORE ============ -->
+  <div class="layer boundary b-det">
+    <span class="ltitle">Deterministic core — reproducible, no floats in the decision path, SHA-256 sealed</span>
+    <div class="sublabel">Validators can only <b>downgrade</b> a claim, never upgrade it. Every finding is sealed inside the plan.</div>
+    <div class="row tight">
+      <div class="card c-det"><div class="fn">validators.py</div><div class="nm">Evidence gates</div><div class="ds">freshness · contradiction · input validation</div></div>
+      <div class="card c-det"><div class="fn">core.py</div><div class="nm">Planning kernel</div><div class="ds">eligible proposals from hard safety constraints</div></div>
+      <div class="card c-det"><div class="fn">verification.py</div><div class="nm">Verification Graph</div><div class="ds">supports · refutes · gaps · human actions per proposal</div></div>
+    </div>
+    <div class="row tight" style="margin-top:10px">
+      <div class="card c-det"><div class="fn">simulate.py</div><div class="nm">Simulations</div><div class="ds">declared what-if worlds — no score, no winner</div></div>
+      <div class="card c-det"><div class="fn">alerts.py</div><div class="nm">Attention feed</div><div class="ds">what changed — <code>dispatch_authority: none</code></div></div>
+      <div class="card c-det"><div class="fn">briefing.py</div><div class="nm">Briefing</div><div class="ds">human-readable incident view</div></div>
+      <div class="card c-det"><div class="fn">export.py</div><div class="nm">Export</div><div class="ds">plan.json · room.geojson · seals</div></div>
+      <div class="card c-det"><div class="fn">trace.py</div><div class="nm">Trace</div><div class="ds">CRONOS-compatible event trace</div></div>
+    </div>
+  </div>
+
+  <!-- ============ PERSISTENCE & IDENTITY ============ -->
+  <div class="layer">
+    <span class="ltitle">Persistence &amp; identity</span>
+    <div class="row">
+      <div class="card c-seal"><div class="fn">incidents.py</div><div class="nm">Incident ledger</div><div class="ds">SQLite · append-only, hash-linked revision events. Corrections supersede but preserve history</div></div>
+      <div class="card c-seal"><div class="fn">auth.py</div><div class="nm">Local operator roles</div><div class="ds">reporter · coordinator · reader · admin — loopback-only</div></div>
+    </div>
+  </div>
+
+  <!-- ============ HUMAN AUTHORITY BOUNDARY ============ -->
+  <div class="layer boundary b-human">
+    <span class="ltitle">Human authority boundary</span>
+    <div class="row">
+      <div class="card c-human" style="flex-basis:100%">
+        <div class="fn">approvals.py</div>
+        <div class="nm">Hash-chained decision ledger</div>
+        <div class="ds">An authenticated coordinator approves or rejects an eligible proposal. Each decision is bound to the
+        <b>exact plan seal</b> and appended to a tamper-evident chain — stale plans and duplicates are refused (HTTP 409).
+        You can always answer: who decided, on what evidence, and when.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ OPTIONAL AGENT BOUNDARY ============ -->
+  <div class="layer boundary b-agent">
+    <span class="ltitle">Optional agent boundary — engaged only after a plan is sealed AND verified</span>
+    <div class="sublabel">The deterministic lifecycle above works fully offline. This path is optional and read-only.</div>
+    <div class="life">
+      <div class="step" style="border-color:var(--agent-bd);background:linear-gradient(180deg,var(--agent-bg),#231a0b)"><div class="st-n">A · PACKET</div><div class="st-t">Sealed, verified packet</div><div class="st-d">closed · read-only · no raw report strings or credentials</div></div>
+      <div class="step" style="border-color:var(--agent-bd);background:linear-gradient(180deg,var(--agent-bg),#231a0b)"><div class="st-n">B · SELECT</div><div class="st-t">OpenAI Responses API</div><div class="st-d">returns only opaque citation IDs · <code>INTERPRETIVE_ONLY</code></div></div>
+      <div class="step" style="border-color:var(--agent-bd);background:linear-gradient(180deg,var(--agent-bg),#231a0b)"><div class="st-n">C · RENDER</div><div class="st-t">Local controlled rendering</div><div class="st-d">every visible sentence from fixed templates + sealed values</div></div>
+      <div class="step" style="border-color:var(--agent-bd);background:linear-gradient(180deg,var(--agent-bg),#231a0b)"><div class="st-n">D · READ</div><div class="st-t">Human reading guide</div><div class="st-d">shown only when its seal and input bindings hold</div></div>
+    </div>
+    <div class="sublabel" style="margin-top:10px">The provider <b>cannot</b> invent a family, route, resource or metric · change urgency, capacity or evidence status ·
+    write operational instructions · approve, reject, or dispatch anything.</div>
+  </div>
+
+  <!-- ============ THE STOP ============ -->
+  <div class="stopbar">
+    <span><b>Zero dispatch authority.</b> No endpoint, button, or model call can send a boat, alert an external channel, or rank the value of human lives. The software proposes; a person decides.</span>
+  </div>
+
+  <!-- ============ GUARANTEES ============ -->
+  <div class="guar">
+    <div class="g"><h4><span class="pin" style="background:var(--det)"></span>Facts have sources</h4><p>A report must be verified and fresh before it can shape a plan. Contradictions are downgraded, never averaged away.</p></div>
+    <div class="g"><h4><span class="pin" style="background:var(--seal)"></span>Corrections preserve the past</h4><p>Reports create revisions; a correction supersedes the snapshot while keeping the previous report in the hash-linked ledger. Old plans go stale, not silently actionable.</p></div>
+    <div class="g"><h4><span class="pin" style="background:var(--human)"></span>People stay accountable</h4><p>Every proposed action waits for an authorized human, and every decision is written into a tamper-evident chain checkable offline.</p></div>
+  </div>
+
+  <footer>
+    <span>Synthetic flood scenario · 10,051 lines · 61 files · 100+ regression tests · Apache-2.0</span>
+    <span>Verify offline: <code>python3 -m lifeline verify --out out</code></span>
+  </footer>
+
+</div>
+</body>
+</html>

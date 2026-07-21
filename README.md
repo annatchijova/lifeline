@@ -1,6 +1,11 @@
 # LIFELINE
 
+![LIFELINE — Verified Coordination](visual/logo.png)
+
 ### When the water rises, the first enemy is not the flood. It is the fog.
+
+**Explore LIFELINE:** [interactive synthetic demo](https://lifeline-openai-hackathon.vercel.app/index.html)
+· [architecture and evidence companion](https://annatchijova.github.io/vigia/lifeline.html)
 
 In the opening hours of a disaster, people are rarely lost for lack of boats or
 beds. They are lost for lack of a shared picture. Which family called. Which
@@ -8,16 +13,22 @@ road is still open. Which shelter still has room. Which boat already left, and
 where it went. The facts exist — scattered across radios, spreadsheets, and the
 memory of exhausted people. No one can see them whole, in time.
 
+That gap is **operational fog**: the distance between what happened, what was
+reported, what was verified, and what people believe is true. During an
+incident, minutes are not only a measurement of time; they are a measurement of
+how far that uncertainty can propagate. Every unverified report, outdated map,
+and disconnected decision widens the gap.
+
 The tempting fix is to hand the whole mess to an algorithm and let it decide who
 gets rescued first. **LIFELINE refuses to do that — on purpose.**
 
 LIFELINE is open infrastructure for humanitarian coordination that makes the
-truth *inspectable* and leaves the decision with a human. It turns verified
-operational facts — requests for help, available resources, open routes, shelter
-capacity — into a transparent, reproducible dispatch **proposal**. Then it
-stops. It never sends a responder. It never ranks whose life matters more. It
-never claims to predict who survives. A coordinator makes every call and carries
-every consequence — but now they can see the whole board while they do.
+available operational picture *inspectable* and leaves the decision with a
+human. It turns verified operational facts — requests for help, available
+resources, open routes, shelter capacity — into a transparent, reproducible
+dispatch **proposal**. Then it stops. A coordinator makes every call and
+carries every consequence — but now they can see the evidence, uncertainty,
+and constraints behind the board while they do.
 
 Because when a machine gets a disaster decision wrong, *"the algorithm chose"* is
 not an answer anyone can live with. So LIFELINE is built the other way around: a
@@ -45,15 +56,35 @@ planning kernel → simulations / alternatives
 human approval → audit ledger → export + offline verification
 ```
 
+The first instinct is to build a better map. But a map cannot tell a
+coordinator which information deserves trust. LIFELINE is built for the moment
+when information stops agreeing with itself: it maintains a shared operational
+picture of what is known, what is uncertain, and what still needs verification.
+
+Its architecture follows three commitments:
+
+- **Because uncertainty cannot be removed, LIFELINE does not hide it.**
+  Contradictions, staleness, and missing evidence remain explicit.
+- **Because accountability cannot be delegated, LIFELINE does not automate the
+  final decision.** It produces inspectable proposals for accountable humans.
+- **Because facts change, LIFELINE does not overwrite history.** Reports create
+  revisions, and decisions bind to an exact sealed plan.
+
 ## Why this project exists
 
-LIFELINE grew out of a deliberate challenge. Its creator usually uses ChatGPT
-to think through forensic and legal systems, where provenance, contradictory
-accounts, auditability, and human responsibility are central. She asked
-ChatGPT for ten directions that would force her out of that domain; three of
-them felt worth pursuing and were combined into one question: how can an
-emergency-coordination system make uncertainty visible without handing a life
-and safety decision to an algorithm?
+LIFELINE grew out of a deliberate challenge and a real observation. Its
+creator has seen the chaos surrounding wildfires closely enough to understand
+that the fire itself is only one part of the emergency: roads become unusable,
+resources are committed elsewhere, visibility changes, reports conflict, and
+people must act from different fragments of reality. The same pattern appears
+in floods, storms, evacuations, and humanitarian emergencies.
+
+She usually uses ChatGPT to think through forensic and legal systems, where
+provenance, contradictory accounts, auditability, and human responsibility are
+central. She asked ChatGPT for ten directions that would force her out of that
+domain; three of them converged into one question: how can the principles of
+evidence preservation, provenance, and accountability help emergency
+coordination without handing a life-and-safety decision to an algorithm?
 
 The idea was developed by asking what could make incomplete, contradictory,
 time-sensitive information useful without pretending that an algorithm should
@@ -70,6 +101,11 @@ source of truth for what the system does. The project uses synthetic data and
 has not been used in real incidents. See
 [`docs/CODEX_COLLABORATION.md`](docs/CODEX_COLLABORATION.md) for the division
 of responsibility and review method.
+
+It is open source because people facing a crisis should not need permission
+from a vendor to understand, inspect, adapt, or improve the tools they depend
+on. Emergency-coordination technology should be auditable by the people and
+organizations who rely on it.
 
 The product surface includes an incident backend, local authenticated
 coordinators, typed report ingestion, role boundaries, a live operations room,
@@ -335,29 +371,6 @@ demo values as operational facts.
 }
 ```
 
-## Captured local screens
-
-These screenshots show the local synthetic workflow: typed report ingestion,
-the controlled cited Agent Briefing, and the sealed incident room. They are
-evidence of the prototype interface, not evidence of a real incident.
-
-<details>
-<summary>Open the six captured local screens</summary>
-
-![Operations console with typed report form](<visual/Screenshot%20from%202026-07-21%2011-47-07.png>)
-
-![Controlled agent briefing rendered in the local operations console](<visual/Screenshot%20from%202026-07-21%2011-59-40.png>)
-
-![Agent briefing observations and deterministic evidence citations](<visual/Screenshot%20from%202026-07-21%2011-59-44.png>)
-
-![Agent briefing questions for human review](<visual/Screenshot%20from%202026-07-21%2011-59-48.png>)
-
-![Sealed local incident room with the controlled agent briefing](<visual/Screenshot%20from%202026-07-21%2011-59-55.png>)
-
-![Evidence citations and human questions in the incident room](<visual/Screenshot%20from%202026-07-21%2012-00-00.png>)
-
-</details>
-
 | Step | OpenAI can do | LIFELINE still controls |
 | --- | --- | --- |
 | Before egress | Nothing | Verifies the plan, verification graph, and their seals locally. |
@@ -378,8 +391,7 @@ python3 -m pip install -e .
 lifeline plan scenarios/flood_v1.json --out out --reference-time 2026-07-17T11:00:00Z
 ```
 
-LIFELINE is released under the [Apache License 2.0](LICENSE). See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for the engineering contract and
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the engineering contract and
 [`SECURITY.md`](SECURITY.md) for the current prototype boundary. The governed
 human-led, Codex-assisted development workflow is documented in
 [`docs/CODEX_COLLABORATION.md`](docs/CODEX_COLLABORATION.md).
@@ -558,13 +570,12 @@ decision and the float boundary.
 ## Host the judge demo
 
 `web/` is a self-contained static demo: it includes Leaflet, the sealed
-synthetic plan, map layers, and simulated alternatives under `web/demo/`.
-The included GitHub Pages workflow deploys that directory on every push to
-`main` that changes the demo. In the repository's **Settings → Pages**, select
-**GitHub Actions** once; after the first successful deployment, GitHub exposes
-the public URL in the workflow's `github-pages` environment. The hosted demo
-is deliberately demo-only: its approve/reject controls remain in-browser and
-cannot write approval records or dispatch anything.
+synthetic plan, map layers, and simulated alternatives under `web/demo/`. The
+public judge site is hosted on Vercel at
+[lifeline-openai-hackathon.vercel.app](https://lifeline-openai-hackathon.vercel.app/index.html).
+GitHub Pages deployment is intentionally not configured for this repository.
+The hosted demo is deliberately demo-only: its approve/reject controls remain
+in-browser and cannot write approval records or dispatch anything.
 
 ## Roadmap
 
@@ -579,3 +590,65 @@ See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md),
 [verification artifact contract](docs/VERIFICATION_ARTIFACT.md) for the
 product architecture, ethical boundaries, simulation model, and the research
 patterns that inform it.
+
+## Architecture
+
+LIFELINE is built around three boundaries: a deterministic core that evaluates
+evidence and constraints; an authenticated human authority boundary that alone
+records approvals; and an optional read-only agent boundary that can select
+citations but cannot alter an incident, plan, alert, approval, or dispatch.
+
+![LIFELINE system architecture: lifecycle, browser surfaces, and entrypoints](visual/1.png)
+
+![LIFELINE system architecture: deterministic core, persistence, human authority, and optional agent boundary](visual/2.png)
+
+The lifecycle diagram below follows one report from ingestion through
+validation, revision, planning, human approval, audit, export, and offline
+verification.
+
+![LIFELINE incident lifecycle](visual/LIFELINE_lifecycle_mermaid.png)
+
+For the full-height composite and its inspectable diagram source, see
+[`LIFELINE_architecture.png`](visual/LIFELINE_architecture.png),
+[`LIFELINE_architecture.md`](visual/LIFELINE_architecture.md), and
+[`LIFELINE_architecture.html`](visual/LIFELINE_architecture.html).
+
+## Captured local screens
+
+These screenshots show the local synthetic workflow: typed report ingestion,
+the controlled cited Agent Briefing, and the sealed incident room. They are
+evidence of the prototype interface, not evidence of a real incident.
+
+### Static judge demo
+
+![LIFELINE static judge landing](<visual/Screenshot from 2026-07-20 16-49-21.png>)
+
+![LIFELINE synthetic incident overview](<visual/Screenshot from 2026-07-20 16-49-26.png>)
+
+![LIFELINE evidence-first planning view](<visual/Screenshot from 2026-07-20 16-49-31.png>)
+
+![LIFELINE verification and human approval view](<visual/Screenshot from 2026-07-20 16-49-41.png>)
+
+![LIFELINE static demo details](<visual/Screenshot from 2026-07-20 16-49-50.png>)
+
+![LIFELINE static demo closing view](<visual/Screenshot from 2026-07-20 16-49-57.png>)
+
+### Local operations and controlled Agent Briefing
+
+![LIFELINE operations console with typed report form](<visual/Screenshot from 2026-07-21 11-47-07.png>)
+
+![LIFELINE controlled agent briefing in local operations](<visual/Screenshot from 2026-07-21 11-59-40.png>)
+
+![LIFELINE agent briefing observations and evidence citations](<visual/Screenshot from 2026-07-21 11-59-44.png>)
+
+![LIFELINE agent briefing questions for human review](<visual/Screenshot from 2026-07-21 11-59-48.png>)
+
+![LIFELINE sealed incident room with controlled agent briefing](<visual/Screenshot from 2026-07-21 11-59-55.png>)
+
+![LIFELINE incident room evidence and human questions](<visual/Screenshot from 2026-07-21 12-00-00.png>)
+
+---
+
+LIFELINE is released under the [Apache License 2.0](LICENSE).
+
+Developed on Linux with Codex, ChatGPT 5.6 Terra, and Luna.
