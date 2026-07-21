@@ -570,13 +570,12 @@ decision and the float boundary.
 ## Host the judge demo
 
 `web/` is a self-contained static demo: it includes Leaflet, the sealed
-synthetic plan, map layers, and simulated alternatives under `web/demo/`.
-The included GitHub Pages workflow deploys that directory on every push to
-`main` that changes the demo. In the repository's **Settings → Pages**, select
-**GitHub Actions** once; after the first successful deployment, GitHub exposes
-the public URL in the workflow's `github-pages` environment. The hosted demo
-is deliberately demo-only: its approve/reject controls remain in-browser and
-cannot write approval records or dispatch anything.
+synthetic plan, map layers, and simulated alternatives under `web/demo/`. The
+public judge site is hosted on Vercel at
+[lifeline-openai-hackathon.vercel.app](https://lifeline-openai-hackathon.vercel.app/index.html).
+GitHub Pages deployment is intentionally not configured for this repository.
+The hosted demo is deliberately demo-only: its approve/reject controls remain
+in-browser and cannot write approval records or dispatch anything.
 
 ## Roadmap
 
