@@ -620,6 +620,33 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     summary.style.margin = "0 0 9px";
     summary.textContent = narration.situation_summary || "";
     content.appendChild(summary);
+    const citationLabel = citation => {
+      if (typeof citation !== "string") return "";
+      if (citation.startsWith("proposal:")) {
+        const requestId = citation.slice("proposal:".length);
+        const proposal = ((state.plan && state.plan.proposals) || []).find(item => item.request_id === requestId);
+        return proposal ? `${citation} — ${proposal.status}; ${(proposal.reasons || []).join(", ")}` : citation;
+      }
+      if (citation.startsWith("verification:")) {
+        const [, requestId, index] = citation.split(":");
+        const node = state.verification && state.verification.nodes && state.verification.nodes[Number(index)];
+        return node && node.request_id === requestId
+          ? `${citation} — ${node.reason_code}; ${node.action_required}` : citation;
+      }
+      if (citation.startsWith("finding:")) {
+        const [, entityType, entityId, index] = citation.split(":");
+        const finding = state.plan && state.plan.validation_findings && state.plan.validation_findings[Number(index)];
+        return finding && finding.entity_type === entityType && finding.entity_id === entityId
+          ? `${citation} — ${finding.code}; ${finding.detail}` : citation;
+      }
+      if (citation.startsWith("event:")) {
+        const change = (artifact.incident_changes || []).find(item => item.citation_id === citation);
+        if (!change) return citation;
+        const changed = (change.changes || []).map(item => `${item.field}: ${item.before} → ${item.after}`).join(", ");
+        return `${citation} — r${change.revision} ${change.event_type} ${change.entity_type}:${change.entity_id}${changed ? `; ${changed}` : ""}`;
+      }
+      return citation;
+    };
     const appendItems = (title, items, field) => {
       if (!Array.isArray(items) || !items.length) return;
       const label = document.createElement("b");
@@ -633,7 +660,8 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
         line.textContent = item && typeof item[field] === "string" ? item[field] : "";
         const citations = document.createElement("small");
         citations.style.cssText = "display:block;margin-top:3px;color:#c39aff";
-        citations.textContent = Array.isArray(item && item.citations) ? `evidence: ${item.citations.join(" · ")}` : "";
+        citations.textContent = Array.isArray(item && item.citations)
+          ? `${w("evidence", "evidencia")}: ${item.citations.map(citationLabel).join(" · ")}` : "";
         row.append(line, citations);
         content.appendChild(row);
       });

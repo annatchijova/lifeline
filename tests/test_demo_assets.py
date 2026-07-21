@@ -48,4 +48,6 @@ def test_room_defaults_to_demo_and_live_mode_has_a_demo_fallback():
     assert "DEMO RUN OF SHOW — THE KERNEL'S COMPLETE PATH" in room_html
     assert "AGENT BRIEFING MODE — OPTIONAL, INTERPRETIVE ONLY" in room_html
     assert "agent_briefing.json" in room_html
+    assert "citationLabel" in room_html
+    assert "incident_changes" in room_html
     assert 'verification.seal.json' in room_html
