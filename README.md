@@ -49,20 +49,27 @@ human approval → audit ledger → export + offline verification
 
 LIFELINE grew out of a deliberate challenge. Its creator usually uses ChatGPT
 to think through forensic and legal systems, where provenance, contradictory
-accounts, auditability, and human responsibility are central. She challenged
-the collaboration to build something genuinely different: a serious system
-for emergency coordination, not a renamed forensic tool and not merely a
-beautiful demo.
+accounts, auditability, and human responsibility are central. She asked
+ChatGPT for ten directions that would force her out of that domain; three of
+them felt worth pursuing and were combined into one question: how can an
+emergency-coordination system make uncertainty visible without handing a life
+and safety decision to an algorithm?
 
 The idea was developed by asking what could make incomplete, contradictory,
 time-sensitive information useful without pretending that an algorithm should
 decide whose life matters more. That inquiry became LIFELINE's evidence model,
 incident revisions, simulations, human approvals, and verification artifacts.
 
-The project was built in Codex on Linux with ChatGPT 5.6 Terra and Luna. The
-repository, tests, generated artifacts, and adversarial audits are the source
-of truth for what the system does. The project uses synthetic data and has not
-been used in real incidents.
+The project was built iteratively in Codex on Linux by Anna Tchijova with
+ChatGPT 5.6 Terra and Luna: define a boundary, close one module, test and
+audit it, then compose the next. The optional Agent Briefing Mode is one
+example—it was added after the deterministic lifecycle existed and was
+constrained to select opaque citations rather than acquire decision authority.
+The repository, tests, generated artifacts, and adversarial audits are the
+source of truth for what the system does. The project uses synthetic data and
+has not been used in real incidents. See
+[`docs/CODEX_COLLABORATION.md`](docs/CODEX_COLLABORATION.md) for the division
+of responsibility and review method.
 
 The product surface includes an incident backend, local authenticated
 coordinators, typed report ingestion, role boundaries, a live operations room,
@@ -70,6 +77,60 @@ human briefing, deterministic planning, alternative-scenario simulation,
 approval recording, alert feeds, GeoJSON export, CRONOS-compatible tracing,
 sealed verification artifacts, and a verification CLI. The static judge demo
 is only the visible window into that larger lifecycle.
+
+## Repository at a glance
+
+LIFELINE is a working open-source research prototype, not a concept paper or
+an interface mock-up. The current tracked baseline contains **10,051 lines of
+code across 61 versioned files**, including **5,380 lines of Python code**,
+2,363 lines of Markdown, 1,177 lines of JSON, and 1,131 lines of HTML. It also
+has **more than 100 automated regression tests** across a deterministic
+planning kernel, authenticated local incident backend, simulation engine,
+sealed verification artifacts, CLI tooling, and browser operations surfaces.
+
+| Tracked surface (`cloc`) | Files | Code lines |
+| --- | ---: | ---: |
+| Python | 32 | 5,380 |
+| Markdown | 18 | 2,363 |
+| JSON | 8 | 1,177 |
+| HTML | 3 | 1,131 |
+| **Total** | **61** | **10,051** |
+
+```text
+lifeline/
+├── lifeline/
+│   ├── __main__.py        # CLI: plan, verify, serve, operator, narrate
+│   ├── alerts.py          # deterministic attention feed
+│   ├── briefing.py        # human-readable incident briefing
+│   ├── core.py            # deterministic planning kernel
+│   ├── validators.py      # freshness, contradiction, and input gates
+│   ├── verification.py    # sealed Verification Graph
+│   ├── incidents.py       # append-only incident revisions
+│   ├── approvals.py       # human decision ledger
+│   ├── auth.py            # local operator roles
+│   ├── simulate.py        # explicit alternative scenarios
+│   ├── agent.py           # optional non-authoritative reading guide
+│   ├── export.py          # plan, GeoJSON, and seal artifacts
+│   ├── trace.py           # CRONOS-compatible event trace
+│   └── server.py          # loopback incident-room backend
+├── web/
+│   ├── index.html         # static bilingual judge landing page
+│   ├── room.html          # synthetic incident map room
+│   ├── ops.html           # authenticated operations console
+│   └── demo/              # sealed static synthetic demo bundle
+├── scenarios/
+│   ├── flood_v1.json      # base synthetic flood incident
+│   └── flood_v1_whatifs.json # alternative conditions for simulation
+├── tests/                 # regression, security, and adversarial coverage
+├── docs/                  # architecture, audits, validation, and video runbook
+├── tools/                 # reproducible demo-bundle tooling
+├── HACKATHON.MD           # judge links and end-to-end runbook
+└── README.md
+```
+
+The implementation is substantial without claiming operational maturity. See
+[`docs/PROTOTYPE_STATUS.md`](docs/PROTOTYPE_STATUS.md) for the evidence,
+limits, red-team scope, and next validation steps.
 
 ## What it is useful for
 
@@ -92,21 +153,40 @@ In every case, the system answers: *what was reported, what was corroborated,
 what conflicts, what is missing, what could be proposed, and who approved it?*
 It does not answer: *which human life is worth more?*
 
-## Important status and safety boundary
+## Prototype status, evidence, and safety boundary
 
-LIFELINE has a carefully tested implementation and an adversarial test suite,
-but it has **not been used in real incidents** and is not validated for live
-emergency operations. The included flood scenario, reports, identities,
-routes, capacities, and decisions are synthetic. They exist to demonstrate the
-architecture and its failure modes, not to represent real people or current
-field conditions.
+LIFELINE is a fully functional **research and hackathon prototype** with a
+synthetic end-to-end scenario: report ingestion, deterministic validation,
+incident revisions, planning, simulation, human approval, export, offline
+verification, and an optional cited reading guide have all been exercised
+locally. Focused red-team rounds reproduced and fixed security issues in
+approval concurrency, bootstrap races, artifact/static-file boundaries, HTTP
+request handling, and the optional agent boundary. Their methods, findings,
+fixes, and falsified vectors are published in [`docs/`](docs/).
 
-This repository is a research and hackathon prototype. It must not replace
-official emergency services, an incident command system, professional advice,
-or local operational procedures. A future deployment would require field
-validation, threat modeling with operators, accessibility and language review,
-identity and authorization design, resilience testing, governance, and formal
-acceptance by the responsible organization.
+That evidence has clear limits. LIFELINE has **not been used in real
+incidents**, is not field-validated, and does not claim to be production-ready
+or safe for live emergency operations. The included flood scenario, reports,
+identities, routes, capacities, and decisions are synthetic. They demonstrate
+architecture and failure modes; they do not represent real people or current
+field conditions. The red-team work is focused security hardening, not an
+exhaustive invariant, resilience, accessibility, or organizational-governance
+assessment.
+
+The next research steps are broader synthetic and adversarial scenario
+campaigns, deeper invariant and recovery testing, operator-centered review,
+and only then carefully governed evaluation with appropriately authorized real
+incident data. Any future deployment would also require identity governance,
+accessibility and language review, resilience testing, local protocol design,
+and formal acceptance by the responsible organization.
+
+Read the evidence directly: [`Prototype Status and Validation Roadmap`](docs/PROTOTYPE_STATUS.md),
+[`Verification Artifact`](docs/VERIFICATION_ARTIFACT.md),
+[`Agent Briefing Mode`](docs/AGENT_BRIEFING_MODE.md), and the published
+[`red-team audits`](docs/RED_TEAM_AUDIT_2026-07-19.md).
+
+This repository must not replace official emergency services, an incident
+command system, professional advice, or local operational procedures.
 
 ## Three commitments — written into the code, not just the pitch
 
@@ -167,6 +247,116 @@ current incident through the Operations console; that optional provider egress
 is authenticated and cannot alter the incident. See
 [`docs/AGENT_BRIEFING_MODE.md`](docs/AGENT_BRIEFING_MODE.md) for the contract,
 local setup, and verification boundary.
+
+## Try it yourself: append a typed incident report
+
+The static demo already includes a sealed Agent Briefing artifact so that the
+purple panel is visible without an API key. A fresh local export starts without
+one by design: first create or load an incident, compute and verify its plan,
+and then optionally run `lifeline narrate`. The deterministic lifecycle never
+depends on the agent.
+
+To add reports through the local Operations console, start a local room, open
+`http://127.0.0.1:8094/web/ops.html`, select the incident, choose the report
+type, click **Fill template**, replace every value, and click **Append report**.
+Use **Supersede with correction** only when correcting an existing entity: it
+creates a new revision while preserving the previous report in the ledger.
+
+Every report requires provenance:
+
+- `source` and `source_type`: who or what reported it, and what kind of source it was;
+- `observed_at`: an ISO 8601 timestamp with timezone, for example
+  `2026-07-21T12:00:00Z`;
+- `verification_state`: exactly `verified`, `unverified`, or `conflicting`;
+- `freshness`: exactly `high`, `medium`, or `low`;
+- every zone field must match a zone already present in the incident.
+
+These are complete copy/paste examples for the bundled flood scenario. Replace
+the identifiers and facts with your own incident data; do not use synthetic
+demo values as operational facts.
+
+```json
+{
+  "request_id": "family-west",
+  "people": 3,
+  "urgency": 4,
+  "medical_need": false,
+  "pickup_zone": "north-bank",
+  "destination_zone": "shelter-a",
+  "source": "operator-12",
+  "source_type": "verified_operator",
+  "observed_at": "2026-07-21T12:00:00Z",
+  "verification_state": "verified",
+  "freshness": "high"
+}
+```
+
+```json
+{
+  "resource_id": "boat-03",
+  "kind": "boat",
+  "capacity": 6,
+  "available": true,
+  "can_transport_medical": false,
+  "zone": "boat-base",
+  "source": "fleet-registry",
+  "source_type": "institutional",
+  "observed_at": "2026-07-21T12:00:00Z",
+  "verification_state": "verified",
+  "freshness": "high"
+}
+```
+
+```json
+{
+  "shelter_id": "shelter-c",
+  "zone": "shelter-a",
+  "beds_open": 8,
+  "open": true,
+  "source": "shelter-manager-c",
+  "source_type": "institutional",
+  "observed_at": "2026-07-21T12:00:00Z",
+  "verification_state": "verified",
+  "freshness": "high"
+}
+```
+
+```json
+{
+  "origin": "north-bank",
+  "destination": "shelter-a",
+  "eta_minutes": 8,
+  "open": true,
+  "source": "patrol-12",
+  "source_type": "responder",
+  "observed_at": "2026-07-21T12:00:00Z",
+  "verification_state": "verified",
+  "freshness": "high"
+}
+```
+
+## Captured local screens
+
+These screenshots show the local synthetic workflow: typed report ingestion,
+the controlled cited Agent Briefing, and the sealed incident room. They are
+evidence of the prototype interface, not evidence of a real incident.
+
+<details>
+<summary>Open the six captured local screens</summary>
+
+![Operations console with typed report form](<visual/Screenshot%20from%202026-07-21%2011-47-07.png>)
+
+![Controlled agent briefing rendered in the local operations console](<visual/Screenshot%20from%202026-07-21%2011-59-40.png>)
+
+![Agent briefing observations and deterministic evidence citations](<visual/Screenshot%20from%202026-07-21%2011-59-44.png>)
+
+![Agent briefing questions for human review](<visual/Screenshot%20from%202026-07-21%2011-59-48.png>)
+
+![Sealed local incident room with the controlled agent briefing](<visual/Screenshot%20from%202026-07-21%2011-59-55.png>)
+
+![Evidence citations and human questions in the incident room](<visual/Screenshot%20from%202026-07-21%2012-00-00.png>)
+
+</details>
 
 | Step | OpenAI can do | LIFELINE still controls |
 | --- | --- | --- |

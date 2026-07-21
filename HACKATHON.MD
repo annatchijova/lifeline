@@ -4,12 +4,39 @@ This file is the practical submission and demo runbook for LIFELINE. It is a
 research and hackathon prototype using synthetic data only; it has not been
 used in real incidents and is not an emergency service.
 
+For the precise maturity claim behind the submission, read
+[`docs/PROTOTYPE_STATUS.md`](docs/PROTOTYPE_STATUS.md). It distinguishes the
+working synthetic prototype, published red-team evidence, current limits, and
+the next validation steps.
+
 ## Submission and session references
 
 - `genial`: `019f6fec-10f8-78d2-b060-c96c3ed6a718`
 - LIFELINE session: `019f704c-b199-7df0-92d3-1a8d82beafa1`
 - LIFELINE session: `019f6dd0-45f4-7821-b831-ed252199d449`
 - LIFELINE session: `019f72b1-aaf8-7832-9652-74795b424ac2`
+
+## How this prototype was built
+
+LIFELINE began as a deliberate departure from Anna Tchijova's usual forensic
+and legal systems work. She asked ChatGPT for ten very different directions,
+selected three that felt serious, and combined them into the project question:
+how can emergency coordination expose evidence and uncertainty without
+delegating a life-and-safety decision to an algorithm?
+
+Anna, Codex, and ChatGPT 5.6 Terra and Luna built the result iteratively on
+Linux: set a human-authority boundary, close a module, verify and red-team it,
+then compose the next module. The optional Agent Briefing Mode demonstrates
+that method: it was added only after the deterministic incident lifecycle,
+Verification Graph, approval boundary, and offline verifier existed. It can
+select opaque citations from a sealed packet, but it cannot create prose,
+change a plan, approve, alert, or dispatch.
+
+This is collaborative development, not delegated accountability. Anna owns
+product direction and acceptance; code, tests, seals, and published audits are
+the evidence for the technical claims. See
+[`docs/CODEX_COLLABORATION.md`](docs/CODEX_COLLABORATION.md) and
+[`docs/PROTOTYPE_STATUS.md`](docs/PROTOTYPE_STATUS.md).
 
 ## Public judge links
 
@@ -23,6 +50,12 @@ buttons are local browser interactions; they never dispatch a resource or
 write an approval. The hosted operations page is useful to inspect the
 interface, but its authenticated incident backend runs only on a local
 loopback server.
+
+The landing page also includes a captured local NVIDIA Agent Briefing from a
+separate synthetic incident revision. It is a real recorded local output, not
+a live hosted provider call and not an artifact bound to the static map's
+different plan hash. The capture makes the optional reading-guide behavior
+visible without placing a provider key or incident backend on Vercel.
 
 ## How to review the public demo
 

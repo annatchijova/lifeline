@@ -55,6 +55,23 @@ facts. It does not dispatch resources, rank the value of human lives, or
 pretend that contradictory evidence is resolved. When a proposal is blocked,
 the system exposes the reason and the evidence still required.
 
+## Prototype maturity: substantial implementation, limited claim
+
+LIFELINE is working software, not a concept paper or frontend mock-up. The
+current tracked baseline contains **10,051 lines of code across 61 versioned
+files**, including **5,380 lines of Python code**, and **more than 100
+automated regression tests** implementing a deterministic planning kernel,
+local authenticated incident backend, incident revisions, simulations,
+verification artifacts, approval ledger, CLI, and browser operations room.
+
+The complete synthetic lifecycle has been exercised end-to-end, and focused
+red-team rounds reproduced and fixed concrete implementation issues. This is
+meaningful prototype evidence—not a claim of production readiness. The project
+has not been used in real incidents; its data is synthetic; and the existing
+security work is not an exhaustive invariant or field-validation program. See
+[`PROTOTYPE_STATUS.md`](PROTOTYPE_STATUS.md) for the precise boundary and
+research roadmap.
+
 ## What the demo proves
 
 The synthetic demo is designed to show the complete path in a few minutes:
@@ -117,6 +134,7 @@ incidents and is not a live emergency service.
 | Offline verification CLI | [`lifeline/__main__.py`](../lifeline/__main__.py) |
 | Optional OpenAI controlled reading guide | [`lifeline/agent.py`](../lifeline/agent.py) |
 | Adversarial security review | [`docs/RED_TEAM_AUDIT_2026-07-19.md`](RED_TEAM_AUDIT_2026-07-19.md) |
+| Prototype evidence and next validation steps | [`docs/PROTOTYPE_STATUS.md`](PROTOTYPE_STATUS.md) |
 
 ## Suggested answers to common judge questions
 
@@ -174,6 +192,8 @@ by the responsible organization.
   contract and semantic guarantees.
 - [`docs/AGENT_BRIEFING_MODE.md`](AGENT_BRIEFING_MODE.md) — optional OpenAI
   narration contract, input boundary, and verification limits.
+- [`docs/PROTOTYPE_STATUS.md`](PROTOTYPE_STATUS.md) — prototype maturity,
+  current evidence, limits, and validation roadmap.
 - [`docs/EXPORT_RECOVERY.md`](EXPORT_RECOVERY.md) — export atomicity and
   recovery boundary.
 - [`docs/RED_TEAM_AUDIT_2026-07-19.md`](RED_TEAM_AUDIT_2026-07-19.md) and
