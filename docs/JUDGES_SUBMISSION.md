@@ -71,6 +71,8 @@ The synthetic demo is designed to show the complete path in a few minutes:
 8. A local authenticated coordinator approves or rejects a proposal.
 9. The approval ledger records the human decision.
 10. The CLI verifies the plan, seals, incident ledger, and approval chain.
+11. Optional Agent Briefing Mode uses OpenAI to narrate only the sealed,
+    cited evidence packet; it cannot alter the plan or make the decision.
 
 All data in the demo is synthetic. The project has not been used in real
 incidents and is not a live emergency service.
@@ -88,6 +90,9 @@ incidents and is not a live emergency service.
   bindings, and duplicate decisions.
 - **The output is portable.** Plans, GeoJSON, verification artifacts, traces,
   and ledgers can be exported and checked offline.
+- **OpenAI is interpretive, not authoritative.** Agent Briefing Mode turns a
+  sealed evidence packet into cited natural language without giving the model
+  tools for planning, approval, incident mutation, alerting, or dispatch.
 
 ## Technical evidence
 
@@ -107,6 +112,7 @@ incidents and is not a live emergency service.
 | Live incident room | [`web/room.html`](../web/room.html) |
 | Operations console | [`web/ops.html`](../web/ops.html) |
 | Offline verification CLI | [`lifeline/__main__.py`](../lifeline/__main__.py) |
+| Optional OpenAI agent narration | [`lifeline/agent.py`](../lifeline/agent.py) |
 | Adversarial security review | [`docs/RED_TEAM_AUDIT_2026-07-19.md`](RED_TEAM_AUDIT_2026-07-19.md) |
 
 ## Suggested answers to common judge questions
@@ -122,7 +128,9 @@ authority and does not send alerts to external channels.
 Because a fluent answer is not evidence. LIFELINE separates deterministic
 fact handling and access control from optional future narration. A language
 model may explain selected evidence, but it must not select, reorder, invent,
-or authorize operational facts.
+or authorize operational facts. The optional OpenAI Agent Briefing Mode uses a
+sealed read-only packet, strict structured output, supplied citations, and no
+mutation tools. See [`docs/AGENT_BRIEFING_MODE.md`](AGENT_BRIEFING_MODE.md).
 
 ### Is the data real?
 
@@ -161,6 +169,8 @@ by the responsible organization.
   architecture framing.
 - [`docs/VERIFICATION_ARTIFACT.md`](VERIFICATION_ARTIFACT.md) — verification
   contract and semantic guarantees.
+- [`docs/AGENT_BRIEFING_MODE.md`](AGENT_BRIEFING_MODE.md) — optional OpenAI
+  narration contract, input boundary, and verification limits.
 - [`docs/EXPORT_RECOVERY.md`](EXPORT_RECOVERY.md) — export atomicity and
   recovery boundary.
 - [`docs/RED_TEAM_AUDIT_2026-07-19.md`](RED_TEAM_AUDIT_2026-07-19.md) and

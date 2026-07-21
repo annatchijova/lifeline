@@ -44,7 +44,7 @@ MAX_FIELD_LENGTH = 200
 REQUEST_TIMEOUT_SECONDS = 5.0
 PUBLIC_ARTIFACTS = frozenset({
     "plan.json", "plan.seal.json", "verification.json", "verification.seal.json", "room.geojson",
-    "simulation.json", "simulation.seal.json",
+    "simulation.json", "simulation.seal.json", "agent_briefing.json", "agent_briefing.seal.json",
 })
 
 

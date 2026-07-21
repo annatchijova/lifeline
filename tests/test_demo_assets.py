@@ -46,4 +46,6 @@ def test_room_defaults_to_demo_and_live_mode_has_a_demo_fallback():
     assert 'VERIFICATION GRAPH — EVIDENCE BEFORE NARRATIVE' in room_html
     assert 'CONTRADICTORY OBSERVATIONS REMAIN VISIBLE' in room_html
     assert "DEMO RUN OF SHOW — THE KERNEL'S COMPLETE PATH" in room_html
+    assert "AGENT BRIEFING MODE — OPTIONAL, INTERPRETIVE ONLY" in room_html
+    assert "agent_briefing.json" in room_html
     assert 'verification.seal.json' in room_html

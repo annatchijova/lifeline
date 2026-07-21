@@ -35,6 +35,11 @@ def main(argv: list[str] | None = None) -> int:
     simulate_parser.add_argument("--out", default="out")
     simulate_parser.add_argument("--reference-time", help="ISO 8601 time (with timezone) for freshness corroboration")
 
+    narrate_parser = subparsers.add_parser(
+        "narrate", help="optionally create an OpenAI briefing from verified sealed artifacts")
+    narrate_parser.add_argument("--out", default="out", help="directory holding a completed local export")
+    narrate_parser.add_argument("--model", default="gpt-5", help="OpenAI Responses model (default: gpt-5)")
+
     serve_parser = subparsers.add_parser("serve", help="serve the incident room and approvals API on loopback")
     serve_parser.add_argument("--out", default="out", help="directory holding the exported plan (default: out)")
     serve_parser.add_argument("--port", type=int, default=8788)
@@ -96,6 +101,18 @@ def main(argv: list[str] | None = None) -> int:
         print("simulated alternatives are not live facts; no winner is selected")
         return 0
 
+    if args.command == "narrate":
+        from lifeline.agent import AgentBriefingError, narrate_export
+        try:
+            artifact, seal = narrate_export(args.out, model=args.model)
+        except AgentBriefingError as error:
+            print(f"agent narration refused: {error}", file=sys.stderr)
+            return 2
+        print(f"agent briefing sealed sha256={seal['sha256']}")
+        print(f"bound to plan={artifact['plan_sha256']} verification={artifact['verification_sha256']}")
+        print("interpretive-only: no plan, approval, alert, or dispatch action was created")
+        return 0
+
     try:
         result = export_plan(args.scenario, args.out, args.reference_time)
     except ScenarioError as error:
@@ -118,6 +135,8 @@ def _verify(out_dir: Path) -> int:
     failed = False
     plan: dict | None = None
     plan_digest: str | None = None
+    verification: dict | None = None
+    verification_digest: str | None = None
 
     plan_path = out_dir / "plan.json"
     seal_path = out_dir / "plan.seal.json"
@@ -149,7 +168,8 @@ def _verify(out_dir: Path) -> int:
             try:
                 verification = _read_json_object(verification_path)
                 verification_seal = _read_json_object(verification_seal_path)
-                verification_ok = seal_digest(verification) == verification_seal.get("sha256")
+                verification_digest = seal_digest(verification)
+                verification_ok = verification_digest == verification_seal.get("sha256")
                 bound_plan = verification.get("plan_sha256") == verification_seal.get("plan_sha256")
                 bound_plan = bound_plan and plan_digest is not None and verification.get("plan_sha256") == plan_digest
             except (OSError, UnicodeDecodeError, json.JSONDecodeError, CanonicalizationError, ValueError):
@@ -171,6 +191,36 @@ def _verify(out_dir: Path) -> int:
                 else:
                     print("verification seal: FAIL (artifact digest or plan binding does not match)")
                     failed = True
+
+    agent_path = out_dir / "agent_briefing.json"
+    agent_seal_path = out_dir / "agent_briefing.seal.json"
+    if agent_path.exists() or agent_seal_path.exists():
+        if not (agent_path.exists() and agent_seal_path.exists()):
+            print("agent briefing seal: FAIL (agent_briefing.json and agent_briefing.seal.json must both exist)")
+            failed = True
+        elif plan is None or plan_digest is None or verification is None or verification_digest is None:
+            print("agent briefing seal: FAIL (verified plan and verification artifacts are required)")
+            failed = True
+        else:
+            from lifeline.agent import AgentBriefingError, AgentInputs, verify_agent_artifact
+            try:
+                agent = _read_json_object(agent_path)
+                agent_seal = _read_json_object(agent_seal_path)
+                agent_ok = seal_digest(agent) == agent_seal.get("sha256")
+                binding_ok = (
+                    agent.get("plan_sha256") == plan_digest
+                    and agent.get("verification_sha256") == verification_digest
+                    and agent_seal.get("plan_sha256") == plan_digest
+                    and agent_seal.get("verification_sha256") == verification_digest
+                )
+                if not agent_ok or not binding_ok:
+                    raise AgentBriefingError("artifact digest or sealed-input binding does not match")
+                verify_agent_artifact(agent, AgentInputs(plan, verification, plan_digest, verification_digest))
+            except (AgentBriefingError, OSError, UnicodeDecodeError, json.JSONDecodeError, CanonicalizationError, ValueError) as error:
+                print(f"agent briefing seal: FAIL ({error})")
+                failed = True
+            else:
+                print(f"agent briefing seal: PASS (sha256={agent_seal['sha256']}; interpretive-only binding holds)")
 
     sim_path = out_dir / "simulation.json"
     sim_seal_path = out_dir / "simulation.seal.json"

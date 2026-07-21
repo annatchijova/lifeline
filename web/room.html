@@ -149,6 +149,10 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
       <p id="verification-summary" style="margin:5px 0 10px"></p>
       <div id="verification-list"></div>
     </div>
+    <div id="agent-briefing" style="margin-top:18px;padding:11px;border:1px solid rgba(174,112,255,.48);border-radius:9px;font-size:.9rem;color:var(--muted)">
+      <b style="color:#c39aff;display:block;margin-bottom:5px;font-size:.85rem;letter-spacing:.08em" data-en="AGENT BRIEFING MODE — OPTIONAL, INTERPRETIVE ONLY" data-es="MODO BRIEFING DE AGENTE — OPCIONAL, SÓLO INTERPRETATIVO">AGENT BRIEFING MODE — OPTIONAL, INTERPRETIVE ONLY</b>
+      <div id="agent-briefing-content"></div>
+    </div>
     <div id="humanlog"><b data-en="PENDING HUMAN ACTION LOG (LOCAL ONLY)" data-es="REGISTRO LOCAL DE ACCIONES HUMANAS PENDIENTES">PENDING HUMAN ACTION LOG (LOCAL ONLY)</b><div id="loglist"></div></div>
   </aside>
 </main>
@@ -172,7 +176,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
   const state = {
     room: null, plan: null, seal: null, verification: null, verificationSeal: null, sim: null, isDemo,
     decisions: {}, log: [], apiMode: false, planSha: null, planIntegrity: "unknown",
-    verificationIntegrity: "unknown", chain: null, popupLayers: [], legend: null,
+    verificationIntegrity: "unknown", agent: null, agentSeal: null, agentIntegrity: "unknown", chain: null, popupLayers: [], legend: null,
   };
 
   function setLanguage(language) {
@@ -578,6 +582,72 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     });
   }
 
+  function renderAgentBriefing() {
+    const content = document.getElementById("agent-briefing-content");
+    content.innerHTML = "";
+    const artifact = state.agent;
+    const narration = artifact && artifact.narration;
+    const bound = artifact && state.seal && state.verificationSeal
+      && artifact.plan_sha256 === state.seal.sha256
+      && artifact.verification_sha256 === state.verificationSeal.sha256;
+    if (!artifact || !narration) {
+      const note = document.createElement("p");
+      note.style.margin = "5px 0";
+      note.textContent = w(
+        "No optional agent briefing is present. Generate one locally with: lifeline narrate --out out. The deterministic plan remains complete without it.",
+        "No hay un briefing opcional de agente. Generalo localmente con: lifeline narrate --out out. El plan determinístico sigue completo sin él.");
+      content.appendChild(note);
+      return;
+    }
+    if (artifact.authority_boundary !== "INTERPRETIVE_ONLY" || !bound || state.agentIntegrity !== "pass") {
+      const warning = document.createElement("p");
+      warning.style.cssText = "margin:5px 0;color:var(--coral);font-weight:700";
+      warning.textContent = w(
+        "Agent briefing integrity or sealed-input binding failed. It is not used for any decision.",
+        "Falló la integridad o el vínculo con los insumos sellados del briefing de agente. No se usa para ninguna decisión.");
+      content.appendChild(warning);
+      return;
+    }
+    const status = document.createElement("p");
+    status.style.cssText = "margin:5px 0 9px;color:#c39aff;font-size:.82rem;font-weight:700";
+    status.textContent = `${w("sealed optional narration", "narración opcional sellada")} · ${w("input binding verified in browser", "vínculo con insumos verificado en el navegador")} · ${artifact.model}`;
+    content.appendChild(status);
+    const headline = document.createElement("h3");
+    headline.style.cssText = "margin:0 0 6px;font-size:1rem;color:var(--paper)";
+    headline.textContent = narration.headline || w("Untitled briefing", "Briefing sin título");
+    content.appendChild(headline);
+    const summary = document.createElement("p");
+    summary.style.margin = "0 0 9px";
+    summary.textContent = narration.situation_summary || "";
+    content.appendChild(summary);
+    const appendItems = (title, items, field) => {
+      if (!Array.isArray(items) || !items.length) return;
+      const label = document.createElement("b");
+      label.style.cssText = "display:block;margin:9px 0 4px;font-size:.8rem;color:var(--paper)";
+      label.textContent = title;
+      content.appendChild(label);
+      items.forEach(item => {
+        const row = document.createElement("div");
+        row.style.cssText = "margin:5px 0;padding-left:8px;border-left:2px solid rgba(195,154,255,.5)";
+        const line = document.createElement("div");
+        line.textContent = item && typeof item[field] === "string" ? item[field] : "";
+        const citations = document.createElement("small");
+        citations.style.cssText = "display:block;margin-top:3px;color:#c39aff";
+        citations.textContent = Array.isArray(item && item.citations) ? `evidence: ${item.citations.join(" · ")}` : "";
+        row.append(line, citations);
+        content.appendChild(row);
+      });
+    };
+    appendItems(w("OBSERVATIONS WITH CITATIONS", "OBSERVACIONES CON CITAS"), narration.observations, "text");
+    appendItems(w("QUESTIONS FOR A HUMAN", "PREGUNTAS PARA UNA PERSONA"), narration.questions_for_human, "question");
+    const boundary = document.createElement("p");
+    boundary.style.cssText = "margin:10px 0 0;font-size:.8rem;color:var(--muted)";
+    boundary.textContent = w(
+      "Interpretive output only. It cannot create facts, alter the plan, approve, reject, alert, or dispatch.",
+      "Salida sólo interpretativa. No puede crear hechos, alterar el plan, aprobar, rechazar, alertar ni despachar.");
+    content.appendChild(boundary);
+  }
+
   function renderLog() {
     const list = document.getElementById("loglist");
     list.innerHTML = "";
@@ -630,6 +700,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     renderFindings();
     renderSimulation();
     renderVerification();
+    renderAgentBriefing();
     renderLog();
     renderSealinfo();
     renderLegend();
@@ -664,12 +735,14 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
 
   async function boot() {
     try {
-      [state.room, state.plan, state.seal, state.verification, state.verificationSeal] = await Promise.all([
+      [state.room, state.plan, state.seal, state.verification, state.verificationSeal, state.agent, state.agentSeal] = await Promise.all([
         fetch(`${artifactRoot}/room.geojson`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
         fetch(`${artifactRoot}/plan.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
         fetch(`${artifactRoot}/plan.seal.json`).then(r => r.ok ? r.json() : null),
         fetch(`${artifactRoot}/verification.json`).then(r => r.ok ? r.json() : null),
         fetch(`${artifactRoot}/verification.seal.json`).then(r => r.ok ? r.json() : null),
+        fetch(`${artifactRoot}/agent_briefing.json`).then(r => r.ok ? r.json() : null),
+        fetch(`${artifactRoot}/agent_briefing.seal.json`).then(r => r.ok ? r.json() : null),
       ]);
     } catch {
       const bundled = window.LIFELINE_BUNDLED_DEMO;
@@ -679,6 +752,8 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
         state.seal = bundled.seal;
         state.verification = bundled.verification;
         state.verificationSeal = bundled.verificationSeal;
+        state.agent = bundled.agent || null;
+        state.agentSeal = bundled.agentSeal || null;
       } else if (!isDemo) {
         window.location.replace("room.html?mode=demo&missing=live");
         return;
@@ -698,6 +773,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     }
     state.planIntegrity = await verifyPlanSeal(state.plan, state.seal);
     state.verificationIntegrity = await verifyPlanSeal(state.verification, state.verificationSeal);
+    state.agentIntegrity = await verifyPlanSeal(state.agent, state.agentSeal);
     if (state.planIntegrity === "fail") {
       notice.style.display = "block";
       notice.textContent = w(
