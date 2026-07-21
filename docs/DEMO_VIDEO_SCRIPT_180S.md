@@ -194,9 +194,9 @@ and its citation IDs.
 **Voiceover:**
 
 > The deterministic kernel decides what evidence is admissible. The optional
-> OpenAI agent receives only that sealed evidence packet. It explains what is
-> happening with citations, but it has no tools to alter a report, plan,
-> approval, alert, or dispatch.
+> OpenAI guide receives only that sealed packet and returns opaque citations.
+> LIFELINE renders the visible explanation locally, so the provider has no
+> prose, report, plan, approval, alert, or dispatch authority.
 
 This is the OpenAI moment. Do not present the agent as an emergency authority
 or show it giving a recommendation.

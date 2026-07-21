@@ -25,4 +25,5 @@ def test_operations_console_labels_agent_briefing_as_optional_and_non_authoritat
     assert "agent_briefing_seal" in page
     assert "crypto.subtle.digest" in page
     assert "INTERPRETIVE_ONLY" in page
-    assert "cannot modify the incident, plan, approval, or dispatch state" in page
+    assert "OpenAI returns opaque citation selections" in page
+    assert "LIFELINE renders every visible sentence locally" in page

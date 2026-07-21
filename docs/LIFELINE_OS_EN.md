@@ -21,13 +21,14 @@ Deterministic planning
   ↓
 Human approval
   ↓
-Optional narration
+Optional controlled reading guide
 ```
 
-ChatGPT may narrate an approved plan and answer questions over already selected
-evidence. It may not select resources, alter priorities, invent locations,
-assert unverified facts, issue orders, or provide operational advice as an
-authority.
+ChatGPT may select opaque citations over already selected evidence. It does not
+return briefing prose: LIFELINE renders the headline, observations, and human
+questions locally from sealed values and fixed templates. It cannot select
+resources, alter priorities, invent locations, assert unverified facts, issue
+orders, or provide operational advice as an authority.
 
 If the model is unavailable, the plan and its audit trail still exist.
 
@@ -216,7 +217,7 @@ LIFELINE borrows ideas, not entire repositories or out-of-domain capabilities.
 - No hidden stale sources, conflicts, or coverage gaps.
 - No sensitive content sent to a model without policy, notice, and explicit
   authorization.
-- No generated narration treated as original evidence.
+- No provider-generated prose treated as original evidence.
 
 ## First construction sequence
 
@@ -228,7 +229,7 @@ LIFELINE borrows ideas, not entire repositories or out-of-domain capabilities.
 4. **Alternative simulation:** comparable plans with visible assumptions.
 5. **Adversarial laboratory:** duplicates, contradictory sources, impossible
    routes, and text injection.
-6. **Optional narration:** only after the kernel and a human produce an
+6. **Optional reading guide:** only after the kernel and a human produce an
    approved plan.
 
 ## Product promise

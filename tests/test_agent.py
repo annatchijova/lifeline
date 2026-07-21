@@ -13,10 +13,10 @@ from lifeline.agent import (
     incident_change_read_model,
     load_verified_inputs,
     narrate_export,
-    openai_narrate,
+    openai_select_reading_guide,
     openai_request_body,
     narrate_incident_plan,
-    validate_narration,
+    validate_briefing_guide,
     verify_agent_artifact,
     verified_inputs_from_incident_plan,
     write_agent_artifact,
@@ -28,15 +28,11 @@ REPO = Path(__file__).resolve().parent.parent
 SCENARIO_PATH = REPO / "scenarios" / "flood_v1.json"
 
 
-def _response(packet):
+def _guide(packet):
     citation = packet["citations"][0]["id"]
     return {
-        "headline": "Sealed incident briefing",
-        "headline_citations": [citation],
-        "situation_summary": "This is an interpretation of sealed evidence for a human coordinator.",
-        "summary_citations": [citation],
-        "observations": [{"text": "One proposal is present in the sealed plan.", "citations": [citation]}],
-        "questions_for_human": [{"question": "What should be verified next?", "citations": [citation]}],
+        "focus_citations": [citation],
+        "question_citations": [citation],
         "authority_boundary": AUTHORITY_BOUNDARY,
     }
 
@@ -79,34 +75,61 @@ def test_agent_refuses_unsealed_or_semantically_invalid_inputs(tmp_path):
         load_verified_inputs(tmp_path)
 
 
-def test_agent_response_rejects_unknown_citation_and_authority_drift(tmp_path):
+def test_agent_reading_guide_rejects_unknown_citation_and_authority_drift(tmp_path):
     export_plan(SCENARIO_PATH, tmp_path)
     packet = briefing_packet(load_verified_inputs(tmp_path))
-    response = _response(packet)
-    response["observations"][0]["citations"] = ["outside:packet"]
+    response = _guide(packet)
+    response["focus_citations"] = ["outside:packet"]
     with pytest.raises(AgentBriefingError, match="outside the sealed packet"):
-        validate_narration(response, packet)
+        validate_briefing_guide(response, packet)
 
-    response = _response(packet)
+    response = _guide(packet)
     response["authority_boundary"] = "DISPATCH_AUTHORITY"
     with pytest.raises(AgentBriefingError, match="interpretive-only"):
-        validate_narration(response, packet)
+        validate_briefing_guide(response, packet)
 
 
-def test_agent_response_rejects_uncited_headline_or_summary(tmp_path):
+def test_agent_reading_guide_rejects_provider_controlled_prose(tmp_path):
     export_plan(SCENARIO_PATH, tmp_path)
     packet = briefing_packet(load_verified_inputs(tmp_path))
-    response = _response(packet)
-    response["headline"] = "Dispatch boat-02 now"
-    response["headline_citations"] = []
-    with pytest.raises(AgentBriefingError, match="invalid citations in headline"):
-        validate_narration(response, packet)
+    response = _guide(packet) | {"headline": "Dispatch boat-02 now"}
+    with pytest.raises(AgentBriefingError, match="reading-guide contract"):
+        validate_briefing_guide(response, packet)
 
-    response = _response(packet)
-    response["situation_summary"] = "The route is certainly safe and boat-02 must be deployed."
-    response["summary_citations"] = ["outside:packet"]
-    with pytest.raises(AgentBriefingError, match="outside the sealed packet in situation_summary"):
-        validate_narration(response, packet)
+
+def test_agent_reading_guide_normalizes_citation_order_and_removes_priority_signal(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    packet = briefing_packet(load_verified_inputs(tmp_path))
+    first, second = [row["id"] for row in packet["citations"][:2]]
+
+    guide = validate_briefing_guide({
+        "focus_citations": [second, first],
+        "question_citations": [],
+        "authority_boundary": AUTHORITY_BOUNDARY,
+    }, packet)
+
+    assert guide["focus_citations"] == [first, second]
+
+
+def test_provider_directive_prose_is_rejected_before_an_artifact_exists(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    packet = briefing_packet(load_verified_inputs(tmp_path))
+    citation = packet["citations"][0]["id"]
+    directive = {
+        "headline": "Dispatch boat-02 immediately.",
+        "headline_citations": [citation],
+        "situation_summary": "Approve the evacuation now and do not wait for human review.",
+        "summary_citations": [citation],
+        "observations": [],
+        "questions_for_human": [],
+        "authority_boundary": AUTHORITY_BOUNDARY,
+    }
+
+    with pytest.raises(AgentBriefingError, match="reading-guide contract"):
+        openai_select_reading_guide(
+            packet, model="gpt-5", api_key="test-secret",
+            request_sender=lambda _request: json.dumps({"output_text": json.dumps(directive)}).encode("utf-8"),
+        )
 
 
 def test_openai_request_is_structured_no_tools_and_no_retention(tmp_path):
@@ -119,18 +142,21 @@ def test_openai_request_is_structured_no_tools_and_no_retention(tmp_path):
     assert request["text"]["format"]["type"] == "json_schema"
     assert request["text"]["format"]["strict"] is True
     assert AUTHORITY_BOUNDARY in request["instructions"]
+    assert set(request["text"]["format"]["schema"]["properties"]) == {
+        "focus_citations", "question_citations", "authority_boundary",
+    }
 
 
-def test_openai_narration_validates_response_before_writing(tmp_path):
+def test_openai_reading_guide_is_validated_before_writing(tmp_path):
     export_plan(SCENARIO_PATH, tmp_path)
     inputs = load_verified_inputs(tmp_path)
     packet = briefing_packet(inputs)
 
     def sender(_request):
-        return json.dumps({"output_text": json.dumps(_response(packet))}).encode("utf-8")
+        return json.dumps({"output_text": json.dumps(_guide(packet))}).encode("utf-8")
 
-    narration = openai_narrate(packet, model="gpt-5", api_key="test-secret", request_sender=sender)
-    artifact = agent_artifact(inputs, packet, narration, model="gpt-5")
+    guide = openai_select_reading_guide(packet, model="gpt-5", api_key="test-secret", request_sender=sender)
+    artifact = agent_artifact(inputs, packet, guide, model="gpt-5")
     seal = write_agent_artifact(tmp_path, artifact)
 
     stored = json.loads((tmp_path / "agent_briefing.json").read_text(encoding="utf-8"))
@@ -139,6 +165,8 @@ def test_openai_narration_validates_response_before_writing(tmp_path):
     assert seal["agent_briefing_version"] == stored["agent_briefing_version"]
     assert stored["authority_boundary"] == AUTHORITY_BOUNDARY
     assert stored["narration"]["observations"][0]["citations"] == [packet["citations"][0]["id"]]
+    assert stored["guide"] == _guide(packet)
+    assert "Dispatch" not in stored["narration"]["headline"]
     verify_agent_artifact(stored, inputs)
 
 
@@ -155,7 +183,7 @@ def test_verify_rejects_a_resigned_agent_artifact_that_claims_authority(tmp_path
     export_plan(SCENARIO_PATH, tmp_path)
     inputs = load_verified_inputs(tmp_path)
     packet = briefing_packet(inputs)
-    artifact = agent_artifact(inputs, packet, _response(packet), model="gpt-5")
+    artifact = agent_artifact(inputs, packet, _guide(packet), model="gpt-5")
     artifact["authority_boundary"] = "DISPATCH_AUTHORITY"
     write_agent_artifact(tmp_path, artifact)
 
@@ -172,8 +200,8 @@ def test_verify_rejects_a_resigned_agent_artifact_with_an_outside_citation(tmp_p
     export_plan(SCENARIO_PATH, tmp_path)
     inputs = load_verified_inputs(tmp_path)
     packet = briefing_packet(inputs)
-    artifact = agent_artifact(inputs, packet, _response(packet), model="gpt-5")
-    artifact["narration"]["questions_for_human"][0]["citations"] = ["private:mutable-incident"]
+    artifact = agent_artifact(inputs, packet, _guide(packet), model="gpt-5")
+    artifact["guide"]["question_citations"] = ["private:mutable-incident"]
     write_agent_artifact(tmp_path, artifact)
 
     result = subprocess.run(
@@ -182,14 +210,31 @@ def test_verify_rejects_a_resigned_agent_artifact_with_an_outside_citation(tmp_p
     )
 
     assert result.returncode == 1
-    assert "agent briefing seal: FAIL (agent response cites evidence outside the sealed packet" in result.stdout
+    assert "agent briefing seal: FAIL (agent response cites evidence outside the sealed packet in question_citations)" in result.stdout
+
+
+def test_verify_rejects_a_resigned_agent_artifact_with_directive_prose(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    inputs = load_verified_inputs(tmp_path)
+    packet = briefing_packet(inputs)
+    artifact = agent_artifact(inputs, packet, _guide(packet), model="gpt-5")
+    artifact["narration"]["headline"] = "Dispatch boat-02 immediately."
+    write_agent_artifact(tmp_path, artifact)
+
+    result = subprocess.run(
+        [sys.executable, "-m", "lifeline", "verify", "--out", str(tmp_path)],
+        cwd=REPO, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 1
+    assert "agent briefing seal: FAIL (agent briefing narration does not match the controlled local rendering)" in result.stdout
 
 
 def test_verify_rejects_agent_seal_without_browser_canonicalization_metadata(tmp_path):
     export_plan(SCENARIO_PATH, tmp_path)
     inputs = load_verified_inputs(tmp_path)
     packet = briefing_packet(inputs)
-    artifact = agent_artifact(inputs, packet, _response(packet), model="gpt-5")
+    artifact = agent_artifact(inputs, packet, _guide(packet), model="gpt-5")
     seal = write_agent_artifact(tmp_path, artifact)
     seal.pop("canonicalize_version")
     (tmp_path / "agent_briefing.seal.json").write_text(json.dumps(seal), encoding="utf-8")
@@ -225,7 +270,7 @@ def test_incident_plan_uses_the_same_verified_agent_input_boundary(tmp_path, mon
     events = store.events(snapshot.incident_id)
     packet = briefing_packet(inputs, incident_events=events)
 
-    monkeypatch.setattr("lifeline.agent.openai_narrate", lambda given, *, model: _response(given))
+    monkeypatch.setattr("lifeline.agent.openai_select_reading_guide", lambda given, *, model: _guide(given))
     artifact, seal = narrate_incident_plan(result, model="gpt-5", incident_events=events)
 
     assert artifact["plan_sha256"] == result["seal"]["sha256"]
@@ -271,7 +316,7 @@ def test_agent_verifier_rejects_a_resigned_event_delta_that_diverges_from_the_le
     inputs = verified_inputs_from_incident_plan(result)
     events = store.events(snapshot.incident_id)
     packet = briefing_packet(inputs, incident_events=events)
-    artifact = agent_artifact(inputs, packet, _response(packet), model="gpt-5")
+    artifact = agent_artifact(inputs, packet, _guide(packet), model="gpt-5")
     artifact["incident_changes"][0]["entity_type"] = "route"
     rewritten_packet = briefing_packet(inputs, incident_changes=artifact["incident_changes"])
     artifact["packet_sha256"] = seal_digest(rewritten_packet)

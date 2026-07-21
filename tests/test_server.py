@@ -133,16 +133,12 @@ def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room,
         inputs = verified_inputs_from_incident_plan(result)
         packet = briefing_packet(inputs, incident_events=incident_events)
         citation = packet["citations"][0]["id"]
-        narration = {
-            "headline": "Cited local briefing",
-            "headline_citations": [citation],
-            "situation_summary": "An optional interpretation of verified sealed inputs.",
-            "summary_citations": [citation],
-            "observations": [{"text": "The sealed plan remains available.", "citations": [citation]}],
-            "questions_for_human": [{"question": "What evidence should be checked next?", "citations": [citation]}],
+        guide = {
+            "focus_citations": [citation],
+            "question_citations": [citation],
             "authority_boundary": "INTERPRETIVE_ONLY",
         }
-        artifact = agent_artifact(inputs, packet, narration, model=model)
+        artifact = agent_artifact(inputs, packet, guide, model=model)
         return artifact, agent_seal(artifact)
 
     monkeypatch.setattr("lifeline.agent.narrate_incident_plan", fake_narration)

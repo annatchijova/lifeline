@@ -71,8 +71,10 @@ The synthetic demo is designed to show the complete path in a few minutes:
 8. A local authenticated coordinator approves or rejects a proposal.
 9. The approval ledger records the human decision.
 10. The CLI verifies the plan, seals, incident ledger, and approval chain.
-11. Optional Agent Briefing Mode uses OpenAI to narrate only the sealed,
-    cited evidence packet; it cannot alter the plan or make the decision.
+11. Optional Agent Briefing Mode uses OpenAI only to select opaque citations
+    from the sealed evidence packet; LIFELINE renders visible language locally,
+    so the provider cannot alter the plan, make the decision, or inject
+    operational prose.
 
 All data in the demo is synthetic. The project has not been used in real
 incidents and is not a live emergency service.
@@ -112,7 +114,7 @@ incidents and is not a live emergency service.
 | Live incident room | [`web/room.html`](../web/room.html) |
 | Operations console | [`web/ops.html`](../web/ops.html) |
 | Offline verification CLI | [`lifeline/__main__.py`](../lifeline/__main__.py) |
-| Optional OpenAI agent narration | [`lifeline/agent.py`](../lifeline/agent.py) |
+| Optional OpenAI controlled reading guide | [`lifeline/agent.py`](../lifeline/agent.py) |
 | Adversarial security review | [`docs/RED_TEAM_AUDIT_2026-07-19.md`](RED_TEAM_AUDIT_2026-07-19.md) |
 
 ## Suggested answers to common judge questions
