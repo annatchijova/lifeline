@@ -517,8 +517,9 @@ def make_server(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.
     server.approvals_path = server.out_dir / "approvals.jsonl"
     server.approvals_lock = threading.Lock()
     server.request_timeout_seconds = REQUEST_TIMEOUT_SECONDS
-    server.agent_model = os.environ.get("LIFELINE_AGENT_MODEL", "gpt-5")
     server.agent_provider = os.environ.get("LIFELINE_AGENT_PROVIDER", "openai").strip().lower()
+    from lifeline.agent import default_model
+    server.agent_model = os.environ.get("LIFELINE_AGENT_MODEL", default_model(server.agent_provider))
     server.incidents = IncidentStore(server.out_dir / "incidents.sqlite3")
     server.operators = OperatorStore(server.out_dir / "operators.sqlite3")
     return server

@@ -10,6 +10,7 @@ from lifeline.agent import (
     AgentBriefingError,
     agent_artifact,
     briefing_packet,
+    default_model,
     incident_change_read_model,
     load_verified_inputs,
     narrate_export,
@@ -246,6 +247,13 @@ def test_nvidia_request_keeps_provider_packet_and_no_raw_report_strings(tmp_path
     serialized = json.dumps(request).lower()
     assert "nvidia_api_key" not in serialized
     assert "test-secret" not in serialized
+
+
+def test_provider_defaults_use_an_instruction_model_for_nvidia():
+    assert default_model("openai") == "gpt-5"
+    assert default_model("nvidia") == "meta/llama-3.1-8b-instruct"
+    with pytest.raises(AgentBriefingError, match="one of: openai, nvidia"):
+        default_model("unknown")
 
 
 def test_cli_path_requires_a_key_without_writing_an_agent_artifact(tmp_path, monkeypatch):

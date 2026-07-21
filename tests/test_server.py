@@ -124,6 +124,16 @@ def test_server_reads_provider_and_model_only_from_its_process_environment(tmp_p
         server.server_close()
 
 
+def test_server_uses_the_nvidia_instruction_default_when_model_is_not_overridden(tmp_path, monkeypatch):
+    monkeypatch.setenv("LIFELINE_AGENT_PROVIDER", "nvidia")
+    monkeypatch.delenv("LIFELINE_AGENT_MODEL", raising=False)
+    server = make_server(REPO, tmp_path / "out", port=0)
+    try:
+        assert server.agent_model == "meta/llama-3.1-8b-instruct"
+    finally:
+        server.server_close()
+
+
 def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room, monkeypatch):
     from lifeline.agent import agent_artifact, agent_seal, briefing_packet, verified_inputs_from_incident_plan
 

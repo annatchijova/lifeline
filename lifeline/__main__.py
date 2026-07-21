@@ -38,7 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     narrate_parser = subparsers.add_parser(
         "narrate", help="optionally create a provider-assisted briefing from verified sealed artifacts")
     narrate_parser.add_argument("--out", default="out", help="directory holding a completed local export")
-    narrate_parser.add_argument("--model", default="gpt-5", help="OpenAI Responses model (default: gpt-5)")
+    narrate_parser.add_argument(
+        "--model", help="provider model (default: gpt-5 for OpenAI; meta/llama-3.1-8b-instruct for NVIDIA)")
     narrate_parser.add_argument(
         "--provider", choices=("openai", "nvidia"), default="openai",
         help="citation-selector provider (default: openai; NVIDIA is a local development adapter)",
@@ -106,9 +107,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "narrate":
-        from lifeline.agent import AgentBriefingError, narrate_export
+        from lifeline.agent import AgentBriefingError, default_model, narrate_export
         try:
-            artifact, seal = narrate_export(args.out, model=args.model, provider=args.provider)
+            artifact, seal = narrate_export(
+                args.out, model=args.model or default_model(args.provider), provider=args.provider,
+            )
         except AgentBriefingError as error:
             print(f"agent narration refused: {error}", file=sys.stderr)
             return 2

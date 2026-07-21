@@ -116,8 +116,7 @@ may use NVIDIA's documented OpenAI-compatible Chat Completions endpoint:
 ```bash
 export NVIDIA_API_KEY="..."
 python3 -m lifeline narrate --out out \
-  --provider nvidia \
-  --model "<a model enabled by your NVIDIA account>"
+  --provider nvidia
 python3 -m lifeline verify --out out
 ```
 
@@ -134,12 +133,13 @@ browser request:
 ```bash
 export NVIDIA_API_KEY="..."
 export LIFELINE_AGENT_PROVIDER=nvidia
-export LIFELINE_AGENT_MODEL="<a model enabled by your NVIDIA account>"
 python3 -m lifeline serve --out out --port 8094
 ```
 
 Without these development variables, `LIFELINE_AGENT_PROVIDER` defaults to
-`openai` and `LIFELINE_AGENT_MODEL` defaults to `gpt-5`.
+`openai` and `LIFELINE_AGENT_MODEL` defaults to `gpt-5`. When the provider is
+explicitly `nvidia` and no model override is set, it defaults to NVIDIA's
+instruction-tuned `meta/llama-3.1-8b-instruct` rather than a reasoning model.
 
 The command writes:
 
@@ -190,7 +190,8 @@ current plan.
 
 The server chooses its provider and model through
 `LIFELINE_AGENT_PROVIDER` (default `openai`) and `LIFELINE_AGENT_MODEL`
-(default `gpt-5`), never from browser input. This keeps provider and model
+(default `gpt-5`, or `meta/llama-3.1-8b-instruct` for NVIDIA), never from
+browser input. This keeps provider and model
 selection out of untrusted client requests. If the matching local API key is
 missing or the provider rejects the request, the endpoint returns an explicit
 unavailable error and the incident remains unchanged.

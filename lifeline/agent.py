@@ -36,10 +36,24 @@ _PROVIDER_ARTIFACT_IDS = {
     "nvidia": "nvidia_chat_completions",
 }
 _SUPPORTED_ARTIFACT_PROVIDERS = frozenset(_PROVIDER_ARTIFACT_IDS.values())
+_DEFAULT_MODELS = {
+    "openai": "gpt-5",
+    # A non-reasoning, instruction-tuned model is intentional here.  The
+    # provider has only to emit a tiny closed JSON guide, not deliberate.
+    "nvidia": "meta/llama-3.1-8b-instruct",
+}
 
 
 class AgentBriefingError(ValueError):
     """The optional narration path cannot safely produce a briefing."""
+
+
+def default_model(provider: str) -> str:
+    """Return the intentionally conservative default for a supported provider."""
+    model = _DEFAULT_MODELS.get(provider)
+    if model is None:
+        raise AgentBriefingError("agent provider must be one of: openai, nvidia")
+    return model
 
 
 @dataclass(frozen=True)
