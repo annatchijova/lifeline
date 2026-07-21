@@ -651,4 +651,4 @@ evidence of the prototype interface, not evidence of a real incident.
 
 LIFELINE is released under the [Apache License 2.0](LICENSE).
 
-Developed on Linux with Codex, ChatGPT 5.6 Terra, and Luna.
+Developed by Anna Tchijova on Linux with Codex, ChatGPT 5.6 Terra, and Luna.
