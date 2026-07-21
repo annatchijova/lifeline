@@ -587,6 +587,28 @@ See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md),
 product architecture, ethical boundaries, simulation model, and the research
 patterns that inform it.
 
+## Architecture
+
+LIFELINE is built around three boundaries: a deterministic core that evaluates
+evidence and constraints; an authenticated human authority boundary that alone
+records approvals; and an optional read-only agent boundary that can select
+citations but cannot alter an incident, plan, alert, approval, or dispatch.
+
+![LIFELINE system architecture: lifecycle, browser surfaces, and entrypoints](visual/1.png)
+
+![LIFELINE system architecture: deterministic core, persistence, human authority, and optional agent boundary](visual/2.png)
+
+The lifecycle diagram below follows one report from ingestion through
+validation, revision, planning, human approval, audit, export, and offline
+verification.
+
+![LIFELINE incident lifecycle](visual/LIFELINE_lifecycle_mermaid.png)
+
+For the full-height composite and its inspectable diagram source, see
+[`LIFELINE_architecture.png`](visual/LIFELINE_architecture.png),
+[`LIFELINE_architecture.md`](visual/LIFELINE_architecture.md), and
+[`LIFELINE_architecture.html`](visual/LIFELINE_architecture.html).
+
 ## Captured local screens
 
 These screenshots show the local synthetic workflow: typed report ingestion,
