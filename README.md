@@ -168,6 +168,13 @@ is authenticated and cannot alter the incident. See
 [`docs/AGENT_BRIEFING_MODE.md`](docs/AGENT_BRIEFING_MODE.md) for the contract,
 local setup, and verification boundary.
 
+| Step | OpenAI can do | LIFELINE still controls |
+| --- | --- | --- |
+| Before egress | Nothing | Verifies the plan, verification graph, and their seals locally. |
+| Provider call | Select opaque citation IDs from the closed packet. | Keeps raw report strings, credentials, write endpoints, and operational tools out of the request. |
+| Display | Nothing beyond its citation selection. | Renders every human-visible sentence from sealed values and fixed templates. |
+| Decision path | Nothing | Deterministic feasibility, human approval, audit ledger, and offline verification. |
+
 ## Run checks
 
 ```bash
@@ -192,7 +199,9 @@ For hackathon applications and judge questions, see the
 problem statement, product framing, demo claims, technical evidence, common
 answers, and the explicit boundary that the project uses synthetic data and
 has not been used in real incidents. The deeper architecture, verification,
-export, and adversarial-audit documents are linked there as well.
+export, and adversarial-audit documents are linked there as well. The
+[`Hackathon Runbook`](HACKATHON.MD) records the public judge URLs, submission
+references, and the exact local end-to-end walkthrough.
 
 ## Export a plan and run the incident room
 

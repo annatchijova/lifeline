@@ -92,9 +92,10 @@ incidents and is not a live emergency service.
   bindings, and duplicate decisions.
 - **The output is portable.** Plans, GeoJSON, verification artifacts, traces,
   and ledgers can be exported and checked offline.
-- **OpenAI is interpretive, not authoritative.** Agent Briefing Mode turns a
-  sealed evidence packet into cited natural language without giving the model
-  tools for planning, approval, incident mutation, alerting, or dispatch.
+- **OpenAI is interpretive, not authoritative.** Agent Briefing Mode selects
+  opaque citations from a sealed evidence packet. LIFELINE renders the visible
+  language locally, without giving the model tools for planning, approval,
+  incident mutation, alerting, or dispatch.
 
 ## Technical evidence
 
