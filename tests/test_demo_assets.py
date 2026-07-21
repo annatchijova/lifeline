@@ -68,3 +68,8 @@ def test_static_landing_explains_the_working_prototype_and_agent_boundary():
     assert "Optional agent boundary" in landing
     assert "selects opaque citations only" in landing
     assert "no authority to alter an incident, plan, approval, alert, or dispatch state" in landing
+    assert "A real agent run, visible without an API." in landing
+    assert "CAPTURED LOCAL AGENT BRIEFING" in landing
+    assert "nvidia_chat_completions · meta/llama-3.1-8b-instruct" in landing
+    assert "Sealed incident: 0 proposal(s) await a human decision; 4 require evidence review." in landing
+    assert "REQUEST_CONTRADICTION · OBTAIN_DISCRIMINATING_EVIDENCE" in landing

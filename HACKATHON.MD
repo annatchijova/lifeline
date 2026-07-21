@@ -51,6 +51,12 @@ write an approval. The hosted operations page is useful to inspect the
 interface, but its authenticated incident backend runs only on a local
 loopback server.
 
+The landing page also includes a captured local NVIDIA Agent Briefing from a
+separate synthetic incident revision. It is a real recorded local output, not
+a live hosted provider call and not an artifact bound to the static map's
+different plan hash. The capture makes the optional reading-guide behavior
+visible without placing a provider key or incident backend on Vercel.
+
 ## How to review the public demo
 
 1. Open the landing page. It separates the synthetic judge demo, a local
