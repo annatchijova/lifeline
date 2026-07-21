@@ -81,5 +81,9 @@ def test_static_landing_explains_the_working_prototype_and_agent_boundary():
     assert "A real agent run, visible without an API." in landing
     assert "CAPTURED LOCAL AGENT BRIEFING" in landing
     assert "nvidia_chat_completions · meta/llama-3.1-8b-instruct" in landing
+    assert "Captured agent briefing — complete controlled output" in landing
+    assert "Sealed incident: 2 proposal(s) await a human decision; 2 require evidence review." in landing
+    assert "OBSERVATIONS WITH CITATIONS" in landing
+    assert "finding:8 — shelter:shelter-a; STALE_REPORT" in landing
     assert "Sealed incident: 0 proposal(s) await a human decision; 4 require evidence review." in landing
     assert "REQUEST_CONTRADICTION · OBTAIN_DISCRIMINATING_EVIDENCE" in landing
