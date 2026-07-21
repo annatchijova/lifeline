@@ -59,7 +59,7 @@ the system exposes the reason and the evidence still required.
 
 LIFELINE is working software, not a concept paper or frontend mock-up. The
 current repository baseline contains roughly **6,700 lines of Python** and
-**116 automated regression tests** implementing a deterministic planning
+**more than 100 automated regression tests** implementing a deterministic planning
 kernel, local authenticated incident backend, incident revisions, simulations,
 verification artifacts, approval ledger, CLI, and browser operations room.
 

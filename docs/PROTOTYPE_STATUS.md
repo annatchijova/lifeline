@@ -7,7 +7,7 @@ It is not a concept paper, interface mock-up, production service, or validated
 emergency-management system.
 
 The current repository baseline contains roughly 6,700 lines of Python and
-116 automated regression tests. Its synthetic vertical slice exercises typed
+more than 100 automated regression tests. Its synthetic vertical slice exercises typed
 report ingestion, deterministic validation, incident revisions, planning,
 Verification Graph generation, alternative simulation, local authenticated
 approval, export, browser rendering, and offline verification.

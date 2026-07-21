@@ -49,20 +49,27 @@ human approval → audit ledger → export + offline verification
 
 LIFELINE grew out of a deliberate challenge. Its creator usually uses ChatGPT
 to think through forensic and legal systems, where provenance, contradictory
-accounts, auditability, and human responsibility are central. She challenged
-the collaboration to build something genuinely different: a serious system
-for emergency coordination, not a renamed forensic tool and not merely a
-beautiful demo.
+accounts, auditability, and human responsibility are central. She asked
+ChatGPT for ten directions that would force her out of that domain; three of
+them felt worth pursuing and were combined into one question: how can an
+emergency-coordination system make uncertainty visible without handing a life
+and safety decision to an algorithm?
 
 The idea was developed by asking what could make incomplete, contradictory,
 time-sensitive information useful without pretending that an algorithm should
 decide whose life matters more. That inquiry became LIFELINE's evidence model,
 incident revisions, simulations, human approvals, and verification artifacts.
 
-The project was built in Codex on Linux with ChatGPT 5.6 Terra and Luna. The
-repository, tests, generated artifacts, and adversarial audits are the source
-of truth for what the system does. The project uses synthetic data and has not
-been used in real incidents.
+The project was built iteratively in Codex on Linux by Anna Tchijova with
+ChatGPT 5.6 Terra and Luna: define a boundary, close one module, test and
+audit it, then compose the next. The optional Agent Briefing Mode is one
+example—it was added after the deterministic lifecycle existed and was
+constrained to select opaque citations rather than acquire decision authority.
+The repository, tests, generated artifacts, and adversarial audits are the
+source of truth for what the system does. The project uses synthetic data and
+has not been used in real incidents. See
+[`docs/CODEX_COLLABORATION.md`](docs/CODEX_COLLABORATION.md) for the division
+of responsibility and review method.
 
 The product surface includes an incident backend, local authenticated
 coordinators, typed report ingestion, role boundaries, a live operations room,
@@ -75,7 +82,7 @@ is only the visible window into that larger lifecycle.
 
 LIFELINE is a working open-source research prototype, not a concept paper or
 an interface mock-up. At the current repository baseline it contains roughly
-**6,700 lines of Python** and **116 automated regression tests** across a
+**6,700 lines of Python** and **more than 100 automated regression tests** across a
 deterministic planning kernel, authenticated local incident backend,
 simulation engine, sealed verification artifacts, CLI tooling, and browser
 operations surfaces.

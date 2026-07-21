@@ -56,3 +56,15 @@ def test_room_defaults_to_demo_and_live_mode_has_a_demo_fallback():
     assert "sealBound" in room_html
     assert "state.agentSeal.seal_version === 3" in room_html
     assert 'verification.seal.json' in room_html
+
+
+def test_static_landing_explains_the_working_prototype_and_agent_boundary():
+    landing = (REPO / "web" / "index.html").read_text(encoding="utf-8")
+
+    assert "Built as a system, not a mock-up." in landing
+    assert "Ten ideas. Three became one." in landing
+    assert "100+ regression tests" in landing
+    assert "focused red-team rounds" in landing
+    assert "Optional agent boundary" in landing
+    assert "selects opaque citations only" in landing
+    assert "no authority to alter an incident, plan, approval, alert, or dispatch state" in landing
