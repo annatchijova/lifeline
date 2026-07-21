@@ -52,4 +52,5 @@ def test_room_defaults_to_demo_and_live_mode_has_a_demo_fallback():
     assert "incident_changes" in room_html
     assert "headline_citations" in room_html
     assert "summary_citations" in room_html
+    assert "agent_briefing_version !== 4" in room_html
     assert 'verification.seal.json' in room_html

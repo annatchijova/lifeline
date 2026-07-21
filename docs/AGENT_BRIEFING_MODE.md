@@ -43,17 +43,19 @@ It cannot:
 4. The Verification Graph passes its semantic, closed-vocabulary authority
    checks.
 
-Only then does LIFELINE build a minimal packet containing the sealed briefing,
-proposal read model, verification nodes, validation findings, and a closed list
-of citation IDs. The packet deliberately excludes raw mutable incident data,
-operator credentials, approval records, and all write endpoints.
+Only then does LIFELINE build a minimal packet containing typed proposal and
+verification state, validation codes, and a closed list of opaque citation IDs.
+The packet deliberately excludes raw mutable incident data, reporter-controlled
+identifiers and provenance strings, operator credentials, approval records, and
+all write endpoints. The local UI resolves an opaque citation back to the real
+sealed evidence for the coordinator; the provider never needs those names.
 
 For a persisted incident, the packet may also include a deterministic change
 read model from the verified event ledger. Each change names its revision,
-event type, entity, timestamp, and immutable event hash. Report payloads are
-reduced through an allowlist of operational fields before they reach the model;
-free-text source fields and other raw event content are not forwarded. This
-lets the agent explain *what changed since a revision* without treating an
+event type, entity class, and immutable event hash. Report payloads are reduced
+to non-textual values and closed enums before they reach the model; source,
+timestamp, zone, identifier, and other raw report content are not forwarded.
+This lets the agent explain *what changed since a revision* without treating an
 untrusted report string as instructions.
 
 ## OpenAI request policy

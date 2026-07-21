@@ -21,7 +21,7 @@ from urllib.request import Request, urlopen
 from lifeline.export import CanonicalizationError, _atomic_write_text, seal_digest
 from lifeline.verification import VerificationError, verify_payload
 
-AGENT_BRIEFING_VERSION = 3
+AGENT_BRIEFING_VERSION = 4
 AGENT_SEAL_VERSION = 1
 AUTHORITY_BOUNDARY = "INTERPRETIVE_ONLY"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -111,12 +111,52 @@ NARRATION_SCHEMA = {
 }
 
 _EVENT_TYPES = frozenset({"incident_created", "report_added", "report_superseded"})
+# The provider packet never carries reporter-controlled strings (identifiers,
+# zones, labels, provenance, timestamps, or free-text validator details).
+# These fields retain enough typed operational context for narration while the
+# local UI resolves opaque citations to their real sealed evidence.
 _REPORT_FIELDS = {
-    "request": ("people", "urgency", "medical_need", "pickup_zone", "destination_zone", "verification_state", "freshness", "observed_at"),
-    "resource": ("kind", "capacity", "available", "can_transport_medical", "zone", "verification_state", "freshness", "observed_at"),
-    "shelter": ("zone", "beds_open", "open", "verification_state", "freshness", "observed_at"),
-    "route": ("origin", "destination", "eta_minutes", "open", "verification_state", "freshness", "observed_at"),
+    "request": ("people", "urgency", "medical_need", "verification_state", "freshness"),
+    "resource": ("capacity", "available", "can_transport_medical", "verification_state", "freshness"),
+    "shelter": ("beds_open", "open", "verification_state", "freshness"),
+    "route": ("eta_minutes", "open", "verification_state", "freshness"),
 }
+_REPORT_INT_FIELDS = frozenset({"people", "urgency", "capacity", "beds_open", "eta_minutes"})
+_REPORT_BOOL_FIELDS = frozenset({"medical_need", "available", "can_transport_medical", "open"})
+_REPORT_ENUM_FIELDS = {
+    "verification_state": frozenset({"verified", "unverified", "conflicting"}),
+    "freshness": frozenset({"high", "medium", "low"}),
+}
+_PROPOSAL_REASON_CODES = {
+    "no eligible available resource": "NO_ELIGIBLE_RESOURCE",
+    "no reachable destination shelter capacity": "NO_DESTINATION_CAPACITY",
+    "human approval required": "HUMAN_APPROVAL_REQUIRED",
+    "unverified report": "UNVERIFIED_REPORT",
+    "conflicting reports": "CONFLICTING_REPORTS",
+    "stale report": "STALE_REPORT",
+}
+_VERIFICATION_REASON_CODES = frozenset({
+    "ACCESS_ROUTE_CONTRADICTION", "ACCESS_ROUTE_EVIDENCE_UNUSABLE", "EVIDENCE_GATES_CLEAR",
+    "FEASIBILITY_NOT_ESTABLISHED", "REQUEST_CONTRADICTION", "REQUEST_STALE", "REQUEST_UNVERIFIED",
+    "RESOURCE_EVIDENCE_UNUSABLE", "ROUTE_CONTRADICTION", "ROUTE_EVIDENCE_UNUSABLE",
+    "SHELTER_EVIDENCE_UNUSABLE",
+})
+_VERIFICATION_ACTIONS = frozenset({
+    "HUMAN_APPROVAL_REQUIRED", "VERIFY_REQUEST_REPORT", "OBTAIN_DISCRIMINATING_EVIDENCE",
+    "OBTAIN_FRESH_REQUEST_REPORT", "HUMAN_REVIEW_OF_FEASIBILITY",
+    "OBTAIN_DISCRIMINATING_ROUTE_EVIDENCE", "VERIFY_CURRENT_ROUTE_STATUS",
+    "OBTAIN_DISCRIMINATING_ACCESS_ROUTE_EVIDENCE", "VERIFY_CURRENT_ACCESS_ROUTE_STATUS",
+    "VERIFY_CURRENT_RESOURCE_AVAILABILITY", "VERIFY_CURRENT_DESTINATION_CAPACITY",
+})
+_EVIDENCE_ASSERTIONS = frozenset({
+    "access_route_reported_closed", "access_route_reported_open", "resource_reported_available",
+    "route_reported_closed", "route_reported_open", "shelter_reported_capacity_available",
+})
+_VALIDATION_CODES = frozenset({
+    "FUTURE_TIMESTAMP", "POSSIBLE_DUPLICATE", "ROUTE_CONTRADICTION", "STALE_REPORT",
+    "STALENESS_UNCHECKED", "UNPARSEABLE_TIMESTAMP",
+})
+_ENTITY_TYPES = frozenset({"incident", "scenario", "request", "resource", "shelter", "route"})
 
 
 def _read_json_object(path: Path) -> dict:
@@ -175,10 +215,17 @@ def verified_inputs_from_incident_plan(result: object) -> AgentInputs:
 
 
 def _report_read_model(entity_type: str, report: object) -> dict:
-    """Keep event narration on an allowlisted operational read model."""
+    """Keep event narration on an allowlisted, non-textual read model."""
     if not isinstance(report, dict) or entity_type not in _REPORT_FIELDS:
         return {}
-    return {field: report[field] for field in _REPORT_FIELDS[entity_type] if field in report}
+    safe: dict[str, object] = {}
+    for field in _REPORT_FIELDS[entity_type]:
+        if field not in report:
+            continue
+        value = report[field]
+        if _safe_change_value(field, value):
+            safe[field] = value
+    return safe
 
 
 def incident_change_read_model(events: Iterable[object], inputs: AgentInputs) -> list[dict]:
@@ -207,7 +254,7 @@ def incident_change_read_model(events: Iterable[object], inputs: AgentInputs) ->
         if (
             not isinstance(revision, int) or revision < 1 or revision in revisions
             or not isinstance(event_type, str) or event_type not in _EVENT_TYPES
-            or not isinstance(entity_type, str) or not isinstance(entity_id, str)
+            or not isinstance(entity_type, str) or entity_type not in _ENTITY_TYPES or not isinstance(entity_id, str)
             or not isinstance(event_hash, str) or len(event_hash) != 64
             or any(char not in "0123456789abcdef" for char in event_hash)
             or not isinstance(submitted_at, str)
@@ -221,8 +268,6 @@ def incident_change_read_model(events: Iterable[object], inputs: AgentInputs) ->
             "revision": revision,
             "event_type": event_type,
             "entity_type": entity_type,
-            "entity_id": entity_id,
-            "submitted_at": submitted_at,
             "event_hash": event_hash,
         }
         if event_type == "report_added":
@@ -243,8 +288,17 @@ def incident_change_read_model(events: Iterable[object], inputs: AgentInputs) ->
     return _validated_incident_changes(summaries, inputs)
 
 
-def _safe_change_value(value: object) -> bool:
-    return value is None or isinstance(value, (bool, int, str)) and not isinstance(value, float)
+def _safe_change_value(field: str, value: object, *, allow_none: bool = False) -> bool:
+    """Allow only closed enums and non-textual values into the provider packet."""
+    if value is None:
+        return allow_none
+    if field in _REPORT_INT_FIELDS:
+        return isinstance(value, int) and not isinstance(value, bool)
+    if field in _REPORT_BOOL_FIELDS:
+        return isinstance(value, bool)
+    if field in _REPORT_ENUM_FIELDS:
+        return isinstance(value, str) and value in _REPORT_ENUM_FIELDS[field]
+    return False
 
 
 def _validated_incident_changes(changes: object, inputs: AgentInputs) -> list[dict]:
@@ -259,7 +313,7 @@ def _validated_incident_changes(changes: object, inputs: AgentInputs) -> list[di
     for change in changes:
         if not isinstance(change, dict):
             raise AgentBriefingError("incident change read model is invalid")
-        base = {"citation_id", "revision", "event_type", "entity_type", "entity_id", "submitted_at", "event_hash"}
+        base = {"citation_id", "revision", "event_type", "entity_type", "event_hash"}
         event_type = change.get("event_type")
         entity_type = change.get("entity_type")
         expected = base
@@ -280,8 +334,7 @@ def _validated_incident_changes(changes: object, inputs: AgentInputs) -> list[di
             or not isinstance(event_hash, str) or len(event_hash) != 64
             or any(char not in "0123456789abcdef" for char in event_hash)
             or citation_id != f"event:{revision}:{event_hash}"
-            or not isinstance(entity_type, str) or not isinstance(change.get("entity_id"), str)
-            or not isinstance(change.get("submitted_at"), str)
+            or not isinstance(entity_type, str) or entity_type not in _ENTITY_TYPES
         ):
             raise AgentBriefingError("incident change read model is invalid")
         revisions.add(revision)
@@ -291,7 +344,7 @@ def _validated_incident_changes(changes: object, inputs: AgentInputs) -> list[di
             report = change.get("current_report")
             if allowed_fields is None or not isinstance(report, dict) or not set(report) <= set(allowed_fields):
                 raise AgentBriefingError("incident change read model is invalid")
-            if any(not _safe_change_value(value) for value in report.values()):
+            if any(not _safe_change_value(field, value) for field, value in report.items()):
                 raise AgentBriefingError("incident change read model is invalid")
             item["current_report"] = {field: report[field] for field in allowed_fields if field in report}
         if event_type == "report_superseded":
@@ -307,7 +360,7 @@ def _validated_incident_changes(changes: object, inputs: AgentInputs) -> list[di
                 field = delta.get("field")
                 if not isinstance(field, str) or field not in allowed_fields or field in fields:
                     raise AgentBriefingError("incident change read model is invalid")
-                if not _safe_change_value(delta.get("before")) or not _safe_change_value(delta.get("after")):
+                if not _safe_change_value(field, delta.get("before"), allow_none=True) or not _safe_change_value(field, delta.get("after"), allow_none=True):
                     raise AgentBriefingError("incident change read model is invalid")
                 fields.add(field)
                 normalized_changes.append({"field": field, "before": delta.get("before"), "after": delta.get("after")})
@@ -325,56 +378,95 @@ def briefing_packet(
     """Return the small, closed input packet and stable citation vocabulary.
 
     The packet intentionally does not include approval ledgers, operator tokens,
-    incident write endpoints, or raw mutable incident state. A model sees the
-    same completed read model a human sees, never authority-bearing controls.
+    incident write endpoints, raw mutable incident state, or reporter-supplied
+    strings. A model sees opaque citation references and typed operational
+    state; the local UI resolves those references for the human coordinator.
     """
     citations: list[dict] = []
     proposals: list[dict] = []
-    for proposal in inputs.plan.get("proposals", []):
+    proposal_refs: dict[str, str] = {}
+    for index, proposal in enumerate(inputs.plan.get("proposals", [])):
         if not isinstance(proposal, dict):
-            continue
+            raise AgentBriefingError("sealed plan has an invalid proposal")
         request_id = proposal.get("request_id")
-        if not isinstance(request_id, str):
-            continue
-        citation_id = f"proposal:{request_id}"
-        citations.append({
-            "id": citation_id,
-            "kind": "proposal",
-            "request_id": request_id,
-            "status": proposal.get("status"),
-            "reasons": proposal.get("reasons", []),
-            "resource_id": proposal.get("resource_id"),
-            "shelter_id": proposal.get("shelter_id"),
-            "eta_minutes": proposal.get("eta_minutes"),
-        })
-        proposals.append({
+        status = proposal.get("status")
+        if not isinstance(request_id, str) or request_id in proposal_refs or status not in {"PROPOSED", "NEEDS_HUMAN_REVIEW"}:
+            raise AgentBriefingError("sealed plan has an invalid proposal")
+        citation_id = f"proposal:{index}"
+        proposal_refs[request_id] = citation_id
+        metrics: dict[str, int] = {}
+        reason_codes: list[str] = []
+        reasons = proposal.get("reasons")
+        if not isinstance(reasons, list):
+            raise AgentBriefingError("sealed plan has invalid proposal reasons")
+        for reason in reasons:
+            if not isinstance(reason, str):
+                raise AgentBriefingError("sealed plan has invalid proposal reasons")
+            if reason in _PROPOSAL_REASON_CODES:
+                reason_codes.append(_PROPOSAL_REASON_CODES[reason])
+                continue
+            for field in ("urgency", "people", "eta_minutes"):
+                prefix = field + "="
+                number = reason[len(prefix):] if reason.startswith(prefix) else ""
+                if number and number.isascii() and number.isdecimal():
+                    metrics[field] = int(number)
+                    break
+        summary = {
             "citation_id": citation_id,
-            "request_id": request_id,
-            "status": proposal.get("status"),
-            "reasons": proposal.get("reasons", []),
-        })
+            "proposal_number": index + 1,
+            "status": status,
+            "metrics": metrics,
+            "reason_codes": sorted(set(reason_codes)),
+        }
+        citations.append({"id": citation_id, "kind": "proposal", **{key: value for key, value in summary.items() if key != "citation_id"}})
+        proposals.append(summary)
 
     nodes: list[dict] = []
     for index, node in enumerate(inputs.verification.get("nodes", [])):
         if not isinstance(node, dict) or not isinstance(node.get("request_id"), str):
-            continue
-        citation_id = f"verification:{node['request_id']}:{index}"
+            raise AgentBriefingError("sealed verification artifact has an invalid node")
+        proposal_citation = proposal_refs.get(node["request_id"])
+        if proposal_citation is None:
+            raise AgentBriefingError("sealed verification node has no proposal reference")
+        reason_code = node.get("reason_code")
+        action = node.get("action_required")
+        if reason_code not in _VERIFICATION_REASON_CODES or action not in _VERIFICATION_ACTIONS:
+            raise AgentBriefingError("sealed verification node has unsupported vocabulary")
+        citation_id = f"verification:{index}"
+        def evidence_read_model(rows: object) -> list[dict]:
+            if not isinstance(rows, list):
+                raise AgentBriefingError("sealed verification node has invalid evidence")
+            safe_rows = []
+            for row in rows:
+                if not isinstance(row, dict):
+                    raise AgentBriefingError("sealed verification node has invalid evidence")
+                state = row.get("verification_state")
+                freshness = row.get("freshness")
+                observation = row.get("observation")
+                assertion = row.get("assertion")
+                if state not in _REPORT_ENUM_FIELDS["verification_state"] or freshness not in _REPORT_ENUM_FIELDS["freshness"]:
+                    raise AgentBriefingError("sealed verification node has unsupported evidence state")
+                if observation not in {"ANALYZED", "NOT_ANALYZED", "ANALYSIS_FAILED"}:
+                    raise AgentBriefingError("sealed verification node has unsupported observation state")
+                item = {"verification_state": state, "freshness": freshness, "observation": observation}
+                if assertion is not None:
+                    if assertion not in _EVIDENCE_ASSERTIONS:
+                        raise AgentBriefingError("sealed verification node has unsupported evidence assertion")
+                    item["assertion"] = assertion
+                safe_rows.append(item)
+            return safe_rows
         summary = {
-            "id": citation_id,
-            "kind": "verification_node",
-            "request_id": node["request_id"],
+            "citation_id": citation_id,
+            "proposal_citation": proposal_citation,
             "proposal_status": node.get("proposal_status"),
             "disposition": node.get("disposition"),
-            "reason_code": node.get("reason_code"),
-            "detail": node.get("detail"),
-            "action_required": node.get("action_required"),
-            "required_artifacts": node.get("required_artifacts", []),
-            "supports": node.get("supports", []),
-            "refutes": node.get("refutes", []),
-            "unresolved": node.get("unresolved", []),
+            "reason_code": reason_code,
+            "action_required": action,
+            "supports": evidence_read_model(node.get("supports")),
+            "refutes": evidence_read_model(node.get("refutes")),
         }
-        citations.append(summary)
-        nodes.append({"citation_id": citation_id, **{key: value for key, value in summary.items() if key != "id"}})
+        citations.append({"id": citation_id, "kind": "verification_node", **{key: value for key, value in summary.items() if key != "citation_id"}})
+        nodes.append(summary)
 
     changes = (
         _validated_incident_changes(incident_changes, inputs)
@@ -386,25 +478,44 @@ def briefing_packet(
             key: value for key, value in change.items() if key != "citation_id"
         }})
 
-    findings = inputs.plan.get("validation_findings", [])
-    safe_findings = [finding for finding in findings if isinstance(finding, dict)]
-    for index, finding in enumerate(safe_findings):
+    findings: list[dict] = []
+    for index, finding in enumerate(inputs.plan.get("validation_findings", [])):
+        if not isinstance(finding, dict):
+            raise AgentBriefingError("sealed plan has an invalid validation finding")
+        code = finding.get("code")
+        severity = finding.get("severity")
         entity_type = finding.get("entity_type")
-        entity_id = finding.get("entity_id")
-        if not isinstance(entity_type, str) or not isinstance(entity_id, str):
-            continue
-        citations.append({"id": f"finding:{entity_type}:{entity_id}:{index}", "kind": "validation_finding", **finding})
+        if code not in _VALIDATION_CODES or severity not in {"info", "warn"} or entity_type not in _ENTITY_TYPES:
+            raise AgentBriefingError("sealed plan has unsupported validation vocabulary")
+        citation_id = f"finding:{index}"
+        summary = {"citation_id": citation_id, "code": code, "severity": severity, "entity_type": entity_type}
+        findings.append(summary)
+        citations.append({"id": citation_id, "kind": "validation_finding", **{key: value for key, value in summary.items() if key != "citation_id"}})
 
     return {
-        "packet_version": 1,
+        "packet_version": 2,
         "authority_boundary": AUTHORITY_BOUNDARY,
         "plan_sha256": inputs.plan_sha256,
         "verification_sha256": inputs.verification_sha256,
-        "briefing": inputs.plan.get("briefing", {}),
+        "briefing": {
+            "proposal_counts": {
+                "proposed": sum(item["status"] == "PROPOSED" for item in proposals),
+                "needs_human_review": sum(item["status"] == "NEEDS_HUMAN_REVIEW" for item in proposals),
+                "total": len(proposals),
+            },
+            "validation": {
+                "warn": sum(item["severity"] == "warn" for item in findings),
+                "info": sum(item["severity"] == "info" for item in findings),
+                "by_code": [
+                    {"code": code, "count": sum(item["code"] == code for item in findings)}
+                    for code in sorted({item["code"] for item in findings})
+                ],
+            },
+        },
         "proposals": proposals,
         "verification_nodes": nodes,
         "incident_changes": changes,
-        "validation_findings": safe_findings,
+        "validation_findings": findings,
         "citations": citations,
         "limitations": [
             "This packet contains completed, sealed read models only.",

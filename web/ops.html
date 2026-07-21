@@ -144,27 +144,25 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     const citationLabel = citation => {
       if (typeof citation !== "string") return "";
       if (citation.startsWith("proposal:")) {
-        const requestId = citation.slice("proposal:".length);
-        const proposal = ((current && current.plan && current.plan.proposals) || []).find(item => item.request_id === requestId);
-        return proposal ? `${citation} — ${proposal.status}; ${(proposal.reasons || []).join(", ")}` : citation;
+        const index = Number(citation.slice("proposal:".length));
+        const proposal = ((current && current.plan && current.plan.proposals) || [])[index];
+        return proposal ? `${citation} — ${proposal.request_id}; ${proposal.status}; ${(proposal.reasons || []).join(", ")}` : citation;
       }
       if (citation.startsWith("verification:")) {
-        const [, requestId, index] = citation.split(":");
-        const node = current && current.verification && current.verification.nodes && current.verification.nodes[Number(index)];
-        return node && node.request_id === requestId
-          ? `${citation} — ${node.reason_code}; ${node.action_required}` : citation;
+        const index = Number(citation.slice("verification:".length));
+        const node = current && current.verification && current.verification.nodes && current.verification.nodes[index];
+        return node ? `${citation} — ${node.request_id}; ${node.reason_code}; ${node.action_required}` : citation;
       }
       if (citation.startsWith("finding:")) {
-        const [, entityType, entityId, index] = citation.split(":");
-        const finding = current && current.plan && current.plan.validation_findings && current.plan.validation_findings[Number(index)];
-        return finding && finding.entity_type === entityType && finding.entity_id === entityId
-          ? `${citation} — ${finding.code}; ${finding.detail}` : citation;
+        const index = Number(citation.slice("finding:".length));
+        const finding = current && current.plan && current.plan.validation_findings && current.plan.validation_findings[index];
+        return finding ? `${citation} — ${finding.entity_type}:${finding.entity_id}; ${finding.code}; ${finding.detail}` : citation;
       }
       if (citation.startsWith("event:")) {
         const change = (artifact.incident_changes || []).find(item => item.citation_id === citation);
         if (!change) return citation;
         const changed = (change.changes || []).map(item => `${item.field}: ${item.before} → ${item.after}`).join(", ");
-        return `${citation} — r${change.revision} ${change.event_type} ${change.entity_type}:${change.entity_id}${changed ? `; ${changed}` : ""}`;
+        return `${citation} — r${change.revision} ${change.event_type} ${change.entity_type}${changed ? `; ${changed}` : ""}`;
       }
       return citation;
     };
