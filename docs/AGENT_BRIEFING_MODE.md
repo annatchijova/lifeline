@@ -113,8 +113,10 @@ python3 -m lifeline serve --out out --port 8094
 
 Then visit `http://127.0.0.1:8094/web/room.html?mode=live`. The purple Agent
 Briefing panel shows the cited output only if its browser-verifiable seal and
-input bindings match. Without an artifact, the deterministic room works
-normally and labels the feature as optional.
+input bindings match. The local operations console performs the same digest,
+version, and input-binding checks before it displays its short-lived response.
+Without an artifact, the deterministic room works normally and labels the
+feature as optional.
 
 ## Generate from Local Operations
 

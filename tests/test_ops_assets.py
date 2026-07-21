@@ -21,5 +21,8 @@ def test_operations_console_labels_agent_briefing_as_optional_and_non_authoritat
     assert "incident_changes" in page
     assert "headline_citations" in page
     assert "summary_citations" in page
+    assert "verifyAgentSeal" in page
+    assert "agent_briefing_seal" in page
+    assert "crypto.subtle.digest" in page
     assert "INTERPRETIVE_ONLY" in page
     assert "cannot modify the incident, plan, approval, or dispatch state" in page

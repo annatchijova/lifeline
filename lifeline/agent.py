@@ -18,11 +18,11 @@ from typing import Callable, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from lifeline.export import CanonicalizationError, _atomic_write_text, seal_digest
+from lifeline.export import CANONICALIZE_VERSION, CanonicalizationError, _atomic_write_text, seal_digest
 from lifeline.verification import VerificationError, verify_payload
 
 AGENT_BRIEFING_VERSION = 4
-AGENT_SEAL_VERSION = 1
+AGENT_SEAL_VERSION = 2
 AUTHORITY_BOUNDARY = "INTERPRETIVE_ONLY"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
@@ -759,6 +759,7 @@ def agent_seal(artifact: dict) -> dict:
     """Return the seal metadata for an agent artifact without persisting it."""
     return {
         "sha256": seal_digest(artifact),
+        "canonicalize_version": CANONICALIZE_VERSION,
         "agent_briefing_version": AGENT_BRIEFING_VERSION,
         "seal_version": AGENT_SEAL_VERSION,
         "plan_sha256": artifact["plan_sha256"],

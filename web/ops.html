@@ -68,6 +68,35 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     return payload;
   }
 
+  function canonicalTag(value) {
+    if (value === null) return ["null"];
+    if (typeof value === "boolean") return ["bool", value];
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value)) throw new Error("sealed payload contains a non-integer number");
+      return ["int", String(value)];
+    }
+    if (typeof value === "string") return ["str", value];
+    if (Array.isArray(value)) return ["list", value.map(canonicalTag)];
+    if (typeof value === "object") return ["dict", Object.keys(value).sort().map(key => [key, canonicalTag(value[key])])];
+    throw new Error("unsupported sealed value");
+  }
+
+  function asciiJson(value) {
+    return JSON.stringify(value).replace(/[\u0080-\uffff]/g, char =>
+      `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  }
+
+  async function verifyAgentSeal(artifact, seal) {
+    if (!seal || seal.canonicalize_version !== 1 || seal.agent_briefing_version !== 4 || seal.seal_version !== 2 || !window.crypto || !window.crypto.subtle) return "unavailable";
+    try {
+      const tagged = { canonicalize_version: 1, value: canonicalTag(artifact) };
+      const bytes = new TextEncoder().encode(asciiJson(tagged));
+      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+      const actual = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+      return actual === seal.sha256 ? "pass" : "fail";
+    } catch { return "fail"; }
+  }
+
   function proposalCard(proposal) {
     const card = document.createElement("div");
     card.className = "alert";
@@ -128,18 +157,23 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     }
   }
 
-  function renderAgentBriefing(result) {
+  async function renderAgentBriefing(result) {
     agentResult.innerHTML = "";
     const artifact = result && result.agent_briefing;
+    const seal = result && result.agent_briefing_seal;
     const narration = artifact && artifact.narration;
-    if (!artifact || !narration || artifact.authority_boundary !== "INTERPRETIVE_ONLY") {
-      agentResult.textContent = word("Agent briefing was rejected by its authority boundary.", "El briefing de agente fue rechazado por su límite de autoridad.");
+    const integrity = await verifyAgentSeal(artifact, seal);
+    const bound = artifact && current && artifact.plan_sha256 === current.seal.sha256
+      && artifact.verification_sha256 === current.verification_seal.sha256
+      && seal && seal.plan_sha256 === current.seal.sha256 && seal.verification_sha256 === current.verification_seal.sha256;
+    if (!artifact || !narration || artifact.agent_briefing_version !== 4 || artifact.authority_boundary !== "INTERPRETIVE_ONLY" || integrity !== "pass" || !bound) {
+      agentResult.textContent = word("Agent briefing failed its local integrity or authority checks.", "El briefing de agente no pasó sus controles locales de integridad o autoridad.");
       return;
     }
     const status = document.createElement("div");
     status.className = "ok";
     const delta = Number.isInteger(result.after_revision) ? `${word("changes since revision", "cambios desde la revisión")} ${result.after_revision}` : word("current sealed state", "estado sellado actual");
-    status.textContent = `${word("Cited optional narration", "Narración opcional con citas")} · ${artifact.model} · ${delta} · ${word("no operational authority", "sin autoridad operativa")}`;
+    status.textContent = `${word("Cited optional narration", "Narración opcional con citas")} · ${artifact.model} · ${delta} · ${word("seal and input binding verified in browser", "sello y vínculo con insumos verificados en el navegador")} · ${word("no operational authority", "sin autoridad operativa")}`;
     agentResult.append(status);
     const citationLabel = citation => {
       if (typeof citation !== "string") return "";
@@ -204,7 +238,7 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
         reference_time: current.plan.reference_time,
         after_revision: Math.max(0, current.revision - 1),
       });
-      renderAgentBriefing(result);
+      await renderAgentBriefing(result);
     } catch (error) {
       agentResult.textContent = error.message;
     } finally {

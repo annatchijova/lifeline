@@ -135,6 +135,8 @@ def test_openai_narration_validates_response_before_writing(tmp_path):
 
     stored = json.loads((tmp_path / "agent_briefing.json").read_text(encoding="utf-8"))
     assert seal["sha256"] == seal_digest(stored)
+    assert seal["canonicalize_version"] == 1
+    assert seal["agent_briefing_version"] == stored["agent_briefing_version"]
     assert stored["authority_boundary"] == AUTHORITY_BOUNDARY
     assert stored["narration"]["observations"][0]["citations"] == [packet["citations"][0]["id"]]
     verify_agent_artifact(stored, inputs)
@@ -181,6 +183,24 @@ def test_verify_rejects_a_resigned_agent_artifact_with_an_outside_citation(tmp_p
 
     assert result.returncode == 1
     assert "agent briefing seal: FAIL (agent response cites evidence outside the sealed packet" in result.stdout
+
+
+def test_verify_rejects_agent_seal_without_browser_canonicalization_metadata(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    inputs = load_verified_inputs(tmp_path)
+    packet = briefing_packet(inputs)
+    artifact = agent_artifact(inputs, packet, _response(packet), model="gpt-5")
+    seal = write_agent_artifact(tmp_path, artifact)
+    seal.pop("canonicalize_version")
+    (tmp_path / "agent_briefing.seal.json").write_text(json.dumps(seal), encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "lifeline", "verify", "--out", str(tmp_path)],
+        cwd=REPO, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 1
+    assert "agent briefing seal: FAIL (artifact digest or sealed-input binding does not match)" in result.stdout
 
 
 def test_narrate_cli_refuses_without_a_key(tmp_path):

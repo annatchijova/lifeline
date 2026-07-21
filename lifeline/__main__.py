@@ -202,7 +202,8 @@ def _verify(out_dir: Path) -> int:
             print("agent briefing seal: FAIL (verified plan and verification artifacts are required)")
             failed = True
         else:
-            from lifeline.agent import AgentBriefingError, AgentInputs, verify_agent_artifact
+            from lifeline.agent import AGENT_BRIEFING_VERSION, AGENT_SEAL_VERSION, AgentBriefingError, AgentInputs, verify_agent_artifact
+            from lifeline.export import CANONICALIZE_VERSION
             try:
                 agent = _read_json_object(agent_path)
                 agent_seal = _read_json_object(agent_seal_path)
@@ -212,6 +213,9 @@ def _verify(out_dir: Path) -> int:
                     and agent.get("verification_sha256") == verification_digest
                     and agent_seal.get("plan_sha256") == plan_digest
                     and agent_seal.get("verification_sha256") == verification_digest
+                    and agent_seal.get("canonicalize_version") == CANONICALIZE_VERSION
+                    and agent_seal.get("agent_briefing_version") == AGENT_BRIEFING_VERSION
+                    and agent_seal.get("seal_version") == AGENT_SEAL_VERSION
                 )
                 if not agent_ok or not binding_ok:
                     raise AgentBriefingError("artifact digest or sealed-input binding does not match")
