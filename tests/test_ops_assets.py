@@ -17,5 +17,7 @@ def test_operations_console_labels_agent_briefing_as_optional_and_non_authoritat
 
     assert 'id="agent-briefing"' in page
     assert "/agent-briefing" in page
+    assert "citationLabel" in page
+    assert "incident_changes" in page
     assert "INTERPRETIVE_ONLY" in page
     assert "cannot modify the incident, plan, approval, or dispatch state" in page

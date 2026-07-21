@@ -147,13 +147,45 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     const summary = document.createElement("p");
     summary.textContent = narration.situation_summary || "";
     agentResult.append(summary);
+    const citationLabel = citation => {
+      if (typeof citation !== "string") return "";
+      if (citation.startsWith("proposal:")) {
+        const requestId = citation.slice("proposal:".length);
+        const proposal = ((current && current.plan && current.plan.proposals) || []).find(item => item.request_id === requestId);
+        return proposal ? `${citation} — ${proposal.status}; ${(proposal.reasons || []).join(", ")}` : citation;
+      }
+      if (citation.startsWith("verification:")) {
+        const [, requestId, index] = citation.split(":");
+        const node = current && current.verification && current.verification.nodes && current.verification.nodes[Number(index)];
+        return node && node.request_id === requestId
+          ? `${citation} — ${node.reason_code}; ${node.action_required}` : citation;
+      }
+      if (citation.startsWith("finding:")) {
+        const [, entityType, entityId, index] = citation.split(":");
+        const finding = current && current.plan && current.plan.validation_findings && current.plan.validation_findings[Number(index)];
+        return finding && finding.entity_type === entityType && finding.entity_id === entityId
+          ? `${citation} — ${finding.code}; ${finding.detail}` : citation;
+      }
+      if (citation.startsWith("event:")) {
+        const change = (artifact.incident_changes || []).find(item => item.citation_id === citation);
+        if (!change) return citation;
+        const changed = (change.changes || []).map(item => `${item.field}: ${item.before} → ${item.after}`).join(", ");
+        return `${citation} — r${change.revision} ${change.event_type} ${change.entity_type}:${change.entity_id}${changed ? `; ${changed}` : ""}`;
+      }
+      return citation;
+    };
     [[word("Observations", "Observaciones"), narration.observations, "text"], [word("Questions for a human", "Preguntas para una persona"), narration.questions_for_human, "question"]].forEach(([label, items, field]) => {
       if (!Array.isArray(items) || !items.length) return;
       const title = document.createElement("b"); title.textContent = label; agentResult.append(title);
       items.forEach(item => {
         const line = document.createElement("p");
-        line.textContent = `${item[field]} [${Array.isArray(item.citations) ? item.citations.join(" · ") : ""}]`;
+        line.textContent = item[field];
+        const citations = document.createElement("small");
+        citations.style.cssText = "display:block;margin-top:3px;color:#8e50e6";
+        citations.textContent = Array.isArray(item.citations)
+          ? `${word("evidence", "evidencia")}: ${item.citations.map(citationLabel).join(" · ")}` : "";
         agentResult.append(line);
+        agentResult.append(citations);
       });
     });
   }
