@@ -138,7 +138,8 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     }
     const status = document.createElement("div");
     status.className = "ok";
-    status.textContent = `${word("Cited optional narration", "Narración opcional con citas")} · ${artifact.model} · ${word("no operational authority", "sin autoridad operativa")}`;
+    const delta = Number.isInteger(result.after_revision) ? `${word("changes since revision", "cambios desde la revisión")} ${result.after_revision}` : word("current sealed state", "estado sellado actual");
+    status.textContent = `${word("Cited optional narration", "Narración opcional con citas")} · ${artifact.model} · ${delta} · ${word("no operational authority", "sin autoridad operativa")}`;
     agentResult.append(status);
     const headline = document.createElement("h3");
     headline.textContent = narration.headline || word("Untitled briefing", "Briefing sin título");
@@ -167,6 +168,7 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     try {
       const result = await request(`/api/incidents/${encodeURIComponent(current.incident_id)}/agent-briefing`, {
         reference_time: current.plan.reference_time,
+        after_revision: Math.max(0, current.revision - 1),
       });
       renderAgentBriefing(result);
     } catch (error) {

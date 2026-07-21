@@ -48,6 +48,14 @@ proposal read model, verification nodes, validation findings, and a closed list
 of citation IDs. The packet deliberately excludes raw mutable incident data,
 operator credentials, approval records, and all write endpoints.
 
+For a persisted incident, the packet may also include a deterministic change
+read model from the verified event ledger. Each change names its revision,
+event type, entity, timestamp, and immutable event hash. Report payloads are
+reduced through an allowlist of operational fields before they reach the model;
+free-text source fields and other raw event content are not forwarded. This
+lets the agent explain *what changed since a revision* without treating an
+untrusted report string as instructions.
+
 ## OpenAI request policy
 
 The implementation uses the OpenAI Responses API with:
@@ -120,7 +128,10 @@ has no operational authority. The reason is data egress: the route sends the
 same minimal sealed packet to the optional external provider. It does not
 write a report, revision, plan, approval, alert, or dispatch record. The
 response contains a separately sealed short-lived artifact for the current
-incident plan; recomputing a plan requires a new narration request.
+incident plan; recomputing a plan requires a new narration request. By default
+the endpoint includes the latest event only (`after_revision = current - 1`).
+The operations UI supplies that value explicitly, so the result can say what
+changed between the immediately preceding revision and the current plan.
 
 The server chooses the model through `LIFELINE_AGENT_MODEL` (default `gpt-5`),
 not from browser input. This keeps model selection out of untrusted client

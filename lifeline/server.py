@@ -457,16 +457,26 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 reference_time = body.get("reference_time")
                 if reference_time is not None and not isinstance(reference_time, str):
                     raise ApiError(400, "reference_time must be a string or null")
+                after_revision = body.get("after_revision")
+                if after_revision is not None and (isinstance(after_revision, bool) or not isinstance(after_revision, int) or after_revision < 0):
+                    raise ApiError(400, "after_revision must be a non-negative integer or null")
                 try:
                     from lifeline.agent import AgentBriefingError, narrate_incident_plan
+                    current_plan = self.server.incidents.plan(incident_id, reference_time)
+                    if after_revision is None:
+                        after_revision = max(0, current_plan["revision"] - 1)
+                    if after_revision > current_plan["revision"]:
+                        raise ApiError(400, "after_revision cannot exceed the current incident revision")
                     artifact, seal = narrate_incident_plan(
-                        self.server.incidents.plan(incident_id, reference_time),
+                        current_plan,
                         model=self.server.agent_model,
+                        incident_events=self.server.incidents.events(incident_id, after_revision),
                     )
                 except AgentBriefingError as error:
                     raise ApiError(503, f"agent narration unavailable: {error}") from error
                 self._send_json(200, {
                     "incident_id": incident_id,
+                    "after_revision": after_revision,
                     "agent_briefing": artifact,
                     "agent_briefing_seal": seal,
                 })

@@ -14,14 +14,14 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Iterable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from lifeline.export import CanonicalizationError, _atomic_write_text, seal_digest
 from lifeline.verification import VerificationError, verify_payload
 
-AGENT_BRIEFING_VERSION = 1
+AGENT_BRIEFING_VERSION = 2
 AGENT_SEAL_VERSION = 1
 AUTHORITY_BOUNDARY = "INTERPRETIVE_ONLY"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -99,6 +99,14 @@ NARRATION_SCHEMA = {
     },
 }
 
+_EVENT_TYPES = frozenset({"incident_created", "report_added", "report_superseded"})
+_REPORT_FIELDS = {
+    "request": ("people", "urgency", "medical_need", "pickup_zone", "destination_zone", "verification_state", "freshness", "observed_at"),
+    "resource": ("kind", "capacity", "available", "can_transport_medical", "zone", "verification_state", "freshness", "observed_at"),
+    "shelter": ("zone", "beds_open", "open", "verification_state", "freshness", "observed_at"),
+    "route": ("origin", "destination", "eta_minutes", "open", "verification_state", "freshness", "observed_at"),
+}
+
 
 def _read_json_object(path: Path) -> dict:
     try:
@@ -155,7 +163,154 @@ def verified_inputs_from_incident_plan(result: object) -> AgentInputs:
         result.get("plan"), result.get("seal"), result.get("verification"), result.get("verification_seal"))
 
 
-def briefing_packet(inputs: AgentInputs) -> dict:
+def _report_read_model(entity_type: str, report: object) -> dict:
+    """Keep event narration on an allowlisted operational read model."""
+    if not isinstance(report, dict) or entity_type not in _REPORT_FIELDS:
+        return {}
+    return {field: report[field] for field in _REPORT_FIELDS[entity_type] if field in report}
+
+
+def incident_change_read_model(events: Iterable[object], inputs: AgentInputs) -> list[dict]:
+    """Turn verified ledger events into a small, cited change read model.
+
+    This does not forward raw event payloads (whose free-text fields may be
+    untrusted) to the model. It forwards an allowlisted summary of what changed
+    together with the immutable event hash that a coordinator can inspect.
+    ``IncidentStore.events`` verifies the chain before returning these rows;
+    this function additionally checks the shape and revision bounds.
+    """
+    incident_revision = inputs.plan.get("incident_revision")
+    if incident_revision is not None and (not isinstance(incident_revision, int) or incident_revision < 1):
+        raise AgentBriefingError("sealed incident plan has an invalid revision")
+    summaries: list[dict] = []
+    revisions: set[int] = set()
+    for raw in events:
+        if not isinstance(raw, dict):
+            raise AgentBriefingError("incident change event must be an object")
+        revision = raw.get("revision")
+        event_type = raw.get("event_type")
+        entity_type = raw.get("entity_type")
+        entity_id = raw.get("entity_id")
+        event_hash = raw.get("event_hash")
+        submitted_at = raw.get("submitted_at")
+        if (
+            not isinstance(revision, int) or revision < 1 or revision in revisions
+            or not isinstance(event_type, str) or event_type not in _EVENT_TYPES
+            or not isinstance(entity_type, str) or not isinstance(entity_id, str)
+            or not isinstance(event_hash, str) or len(event_hash) != 64
+            or any(char not in "0123456789abcdef" for char in event_hash)
+            or not isinstance(submitted_at, str)
+            or incident_revision is not None and revision > incident_revision
+        ):
+            raise AgentBriefingError("incident change event has an invalid shape")
+        revisions.add(revision)
+        payload = raw.get("payload")
+        summary = {
+            "citation_id": f"event:{revision}:{event_hash}",
+            "revision": revision,
+            "event_type": event_type,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "submitted_at": submitted_at,
+            "event_hash": event_hash,
+        }
+        if event_type == "report_added":
+            summary["current_report"] = _report_read_model(entity_type, payload)
+        elif event_type == "report_superseded":
+            if not isinstance(payload, dict):
+                raise AgentBriefingError("superseded event has an invalid payload")
+            previous = _report_read_model(entity_type, payload.get("previous"))
+            replacement = _report_read_model(entity_type, payload.get("replacement"))
+            changes = [
+                {"field": field, "before": previous.get(field), "after": replacement.get(field)}
+                for field in _REPORT_FIELDS.get(entity_type, ())
+                if previous.get(field) != replacement.get(field)
+            ]
+            summary["changes"] = changes
+            summary["current_report"] = replacement
+        summaries.append(summary)
+    return _validated_incident_changes(summaries, inputs)
+
+
+def _safe_change_value(value: object) -> bool:
+    return value is None or isinstance(value, (bool, int, str)) and not isinstance(value, float)
+
+
+def _validated_incident_changes(changes: object, inputs: AgentInputs) -> list[dict]:
+    """Validate the portable, allowlisted event read model stored in an artifact."""
+    if not isinstance(changes, list) or len(changes) > 64:
+        raise AgentBriefingError("incident change read model is invalid")
+    incident_revision = inputs.plan.get("incident_revision")
+    if incident_revision is not None and (not isinstance(incident_revision, int) or incident_revision < 1):
+        raise AgentBriefingError("sealed incident plan has an invalid revision")
+    normalized: list[dict] = []
+    revisions: set[int] = set()
+    for change in changes:
+        if not isinstance(change, dict):
+            raise AgentBriefingError("incident change read model is invalid")
+        base = {"citation_id", "revision", "event_type", "entity_type", "entity_id", "submitted_at", "event_hash"}
+        event_type = change.get("event_type")
+        entity_type = change.get("entity_type")
+        expected = base
+        if event_type == "report_added":
+            expected = base | {"current_report"}
+        elif event_type == "report_superseded":
+            expected = base | {"current_report", "changes"}
+        elif event_type != "incident_created":
+            raise AgentBriefingError("incident change read model is invalid")
+        if set(change) != expected:
+            raise AgentBriefingError("incident change read model is invalid")
+        revision = change.get("revision")
+        event_hash = change.get("event_hash")
+        citation_id = change.get("citation_id")
+        if (
+            not isinstance(revision, int) or revision < 1 or revision in revisions
+            or incident_revision is not None and revision > incident_revision
+            or not isinstance(event_hash, str) or len(event_hash) != 64
+            or any(char not in "0123456789abcdef" for char in event_hash)
+            or citation_id != f"event:{revision}:{event_hash}"
+            or not isinstance(entity_type, str) or not isinstance(change.get("entity_id"), str)
+            or not isinstance(change.get("submitted_at"), str)
+        ):
+            raise AgentBriefingError("incident change read model is invalid")
+        revisions.add(revision)
+        item = {key: change[key] for key in base}
+        if event_type in {"report_added", "report_superseded"}:
+            allowed_fields = _REPORT_FIELDS.get(entity_type)
+            report = change.get("current_report")
+            if allowed_fields is None or not isinstance(report, dict) or not set(report) <= set(allowed_fields):
+                raise AgentBriefingError("incident change read model is invalid")
+            if any(not _safe_change_value(value) for value in report.values()):
+                raise AgentBriefingError("incident change read model is invalid")
+            item["current_report"] = {field: report[field] for field in allowed_fields if field in report}
+        if event_type == "report_superseded":
+            raw_changes = change.get("changes")
+            allowed_fields = set(_REPORT_FIELDS[entity_type])
+            if not isinstance(raw_changes, list) or len(raw_changes) > len(allowed_fields):
+                raise AgentBriefingError("incident change read model is invalid")
+            fields: set[str] = set()
+            normalized_changes = []
+            for delta in raw_changes:
+                if not isinstance(delta, dict) or set(delta) != {"field", "before", "after"}:
+                    raise AgentBriefingError("incident change read model is invalid")
+                field = delta.get("field")
+                if not isinstance(field, str) or field not in allowed_fields or field in fields:
+                    raise AgentBriefingError("incident change read model is invalid")
+                if not _safe_change_value(delta.get("before")) or not _safe_change_value(delta.get("after")):
+                    raise AgentBriefingError("incident change read model is invalid")
+                fields.add(field)
+                normalized_changes.append({"field": field, "before": delta.get("before"), "after": delta.get("after")})
+            item["changes"] = normalized_changes
+        normalized.append(item)
+    return sorted(normalized, key=lambda item: item["revision"])
+
+
+def briefing_packet(
+    inputs: AgentInputs,
+    *,
+    incident_events: Iterable[object] = (),
+    incident_changes: object | None = None,
+) -> dict:
     """Return the small, closed input packet and stable citation vocabulary.
 
     The packet intentionally does not include approval ledgers, operator tokens,
@@ -210,6 +365,16 @@ def briefing_packet(inputs: AgentInputs) -> dict:
         citations.append(summary)
         nodes.append({"citation_id": citation_id, **{key: value for key, value in summary.items() if key != "id"}})
 
+    changes = (
+        _validated_incident_changes(incident_changes, inputs)
+        if incident_changes is not None
+        else incident_change_read_model(incident_events, inputs)
+    )
+    for change in changes:
+        citations.append({"id": change["citation_id"], "kind": "incident_event", **{
+            key: value for key, value in change.items() if key != "citation_id"
+        }})
+
     findings = inputs.plan.get("validation_findings", [])
     safe_findings = [finding for finding in findings if isinstance(finding, dict)]
     for index, finding in enumerate(safe_findings):
@@ -227,6 +392,7 @@ def briefing_packet(inputs: AgentInputs) -> dict:
         "briefing": inputs.plan.get("briefing", {}),
         "proposals": proposals,
         "verification_nodes": nodes,
+        "incident_changes": changes,
         "validation_findings": safe_findings,
         "citations": citations,
         "limitations": [
@@ -372,6 +538,7 @@ def agent_artifact(inputs: AgentInputs, packet: dict, narration: dict, *, model:
         "plan_sha256": inputs.plan_sha256,
         "verification_sha256": inputs.verification_sha256,
         "packet_sha256": seal_digest(packet),
+        "incident_changes": packet.get("incident_changes", []),
         "narration": narration,
         "limitations": [
             "This is an optional interpretation layer, not a planning or approval artifact.",
@@ -381,7 +548,12 @@ def agent_artifact(inputs: AgentInputs, packet: dict, narration: dict, *, model:
     }
 
 
-def verify_agent_artifact(artifact: object, inputs: AgentInputs) -> None:
+def verify_agent_artifact(
+    artifact: object,
+    inputs: AgentInputs,
+    *,
+    incident_events: Iterable[object] = (),
+) -> None:
     """Check that a narration remains bound to the artifacts it was allowed to read.
 
     This verifies integrity, input binding, the citation vocabulary, and the
@@ -390,7 +562,7 @@ def verify_agent_artifact(artifact: object, inputs: AgentInputs) -> None:
     """
     if not isinstance(artifact, dict) or set(artifact) != {
         "agent_briefing_version", "authority_boundary", "provider", "model",
-        "plan_sha256", "verification_sha256", "packet_sha256", "narration", "limitations",
+        "plan_sha256", "verification_sha256", "packet_sha256", "incident_changes", "narration", "limitations",
     }:
         raise AgentBriefingError("agent briefing does not match the artifact contract")
     if artifact.get("agent_briefing_version") != AGENT_BRIEFING_VERSION:
@@ -401,7 +573,10 @@ def verify_agent_artifact(artifact: object, inputs: AgentInputs) -> None:
         raise AgentBriefingError("agent briefing has an unsupported provider or model")
     if artifact.get("plan_sha256") != inputs.plan_sha256 or artifact.get("verification_sha256") != inputs.verification_sha256:
         raise AgentBriefingError("agent briefing is not bound to the current sealed inputs")
-    packet = briefing_packet(inputs)
+    packet = briefing_packet(inputs, incident_changes=artifact.get("incident_changes"))
+    supplied_changes = list(incident_events)
+    if supplied_changes and packet["incident_changes"] != incident_change_read_model(supplied_changes, inputs):
+        raise AgentBriefingError("agent briefing event delta does not match the verified incident ledger")
     if artifact.get("packet_sha256") != seal_digest(packet):
         raise AgentBriefingError("agent briefing packet binding does not match the sealed inputs")
     validate_narration(artifact.get("narration"), packet)
@@ -432,7 +607,12 @@ def narrate_export(out_dir: str | Path, *, model: str) -> tuple[dict, dict]:
     return artifact, write_agent_artifact(out_dir, artifact)
 
 
-def narrate_incident_plan(result: object, *, model: str) -> tuple[dict, dict]:
+def narrate_incident_plan(
+    result: object,
+    *,
+    model: str,
+    incident_events: Iterable[object] = (),
+) -> tuple[dict, dict]:
     """Narrate one current incident-plan result without writing incident state.
 
     The caller may return this short-lived sealed response to an authenticated
@@ -440,7 +620,7 @@ def narrate_incident_plan(result: object, *, model: str) -> tuple[dict, dict]:
     merely because a narration was requested.
     """
     inputs = verified_inputs_from_incident_plan(result)
-    packet = briefing_packet(inputs)
+    packet = briefing_packet(inputs, incident_events=incident_events)
     narration = openai_narrate(packet, model=model)
     artifact = agent_artifact(inputs, packet, narration, model=model)
     return artifact, agent_seal(artifact)

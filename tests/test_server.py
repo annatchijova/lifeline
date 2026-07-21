@@ -125,10 +125,13 @@ def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room,
     assert before_status == 200
     observed_models = []
 
-    def fake_narration(result, *, model):
+    observed_events = []
+
+    def fake_narration(result, *, model, incident_events=()):
         observed_models.append(model)
+        observed_events.extend(incident_events)
         inputs = verified_inputs_from_incident_plan(result)
-        packet = briefing_packet(inputs)
+        packet = briefing_packet(inputs, incident_events=incident_events)
         citation = packet["citations"][0]["id"]
         narration = {
             "headline": "Cited local briefing",
@@ -149,9 +152,26 @@ def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room,
     assert body["agent_briefing"]["authority_boundary"] == "INTERPRETIVE_ONLY"
     assert body["agent_briefing_seal"]["sha256"]
     assert observed_models == ["gpt-5"]
+    assert body["after_revision"] == 0
+    assert [event["event_type"] for event in observed_events] == ["incident_created"]
     after_status, after = _get_json(base, f"/api/incidents/{incident_id}", token)
     assert after_status == 200
     assert after["revision"] == before["revision"]
+
+
+def test_agent_briefing_rejects_an_event_cursor_beyond_the_current_revision(room):
+    base, _, _, _, token = room
+    scenario = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
+    status, created = _post_to(base, "/api/incidents", scenario, token)
+    assert status == 201
+
+    status, body = _post_to(
+        base,
+        f"/api/incidents/{created['incident_id']}/agent-briefing",
+        {"reference_time": "2026-07-17T11:00:00Z", "after_revision": 2}, token)
+
+    assert status == 400
+    assert "cannot exceed" in body["error"]
 
 
 def _raw_approval_request(base, token, content_length: str) -> bytes:
