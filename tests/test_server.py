@@ -113,6 +113,17 @@ def test_agent_briefing_endpoint_requires_a_coordinator_before_any_provider_call
     assert called is False
 
 
+def test_server_reads_provider_and_model_only_from_its_process_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("LIFELINE_AGENT_PROVIDER", "nvidia")
+    monkeypatch.setenv("LIFELINE_AGENT_MODEL", "nvidia/test-model")
+    server = make_server(REPO, tmp_path / "out", port=0)
+    try:
+        assert server.agent_provider == "nvidia"
+        assert server.agent_model == "nvidia/test-model"
+    finally:
+        server.server_close()
+
+
 def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room, monkeypatch):
     from lifeline.agent import agent_artifact, agent_seal, briefing_packet, verified_inputs_from_incident_plan
 
@@ -124,11 +135,13 @@ def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room,
     before_status, before = _get_json(base, f"/api/incidents/{incident_id}", token)
     assert before_status == 200
     observed_models = []
+    observed_providers = []
 
     observed_events = []
 
-    def fake_narration(result, *, model, incident_events=()):
+    def fake_narration(result, *, model, provider="openai", incident_events=()):
         observed_models.append(model)
+        observed_providers.append(provider)
         observed_events.extend(incident_events)
         inputs = verified_inputs_from_incident_plan(result)
         packet = briefing_packet(inputs, incident_events=incident_events)
@@ -150,6 +163,7 @@ def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room,
     assert body["agent_briefing"]["authority_boundary"] == "INTERPRETIVE_ONLY"
     assert body["agent_briefing_seal"]["sha256"]
     assert observed_models == ["gpt-5"]
+    assert observed_providers == ["openai"]
     assert body["after_revision"] == 0
     assert [event["event_type"] for event in observed_events] == ["incident_created"]
     after_status, after = _get_json(base, f"/api/incidents/{incident_id}", token)

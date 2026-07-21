@@ -173,7 +173,7 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     const status = document.createElement("div");
     status.className = "ok";
     const delta = Number.isInteger(result.after_revision) ? `${word("changes since revision", "cambios desde la revisión")} ${result.after_revision}` : word("current sealed state", "estado sellado actual");
-    status.textContent = `${word("Controlled cited briefing", "Briefing controlado con citas")} · ${artifact.model} · ${delta} · ${word("seal and input binding verified in browser", "sello y vínculo con insumos verificados en el navegador")} · ${word("visible language rendered locally", "lenguaje visible generado localmente")}`;
+    status.textContent = `${word("Controlled cited briefing", "Briefing controlado con citas")} · ${artifact.provider} · ${artifact.model} · ${delta} · ${word("seal and input binding verified in browser", "sello y vínculo con insumos verificados en el navegador")} · ${word("visible language rendered locally", "lenguaje visible generado localmente")}`;
     agentResult.append(status);
     const citationLabel = citation => {
       if (typeof citation !== "string") return "";

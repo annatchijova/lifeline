@@ -12,7 +12,8 @@ Endpoints:
   GET    /api/incidents/{id}/events?after_revision=N -> append-only event feed
   GET    /api/incidents/{id}/alerts?after_revision=N -> deterministic attention feed
   POST   /api/incidents/{id}/plan -> seal a plan from the stored revision
-  POST   /api/incidents/{id}/agent-briefing -> optional, cited OpenAI narration
+  POST   /api/incidents/{id}/agent-briefing -> optional, cited provider-assisted
+                           controlled reading guide
                            over the current sealed incident plan; coordinator
                            authenticated because this is external data egress
   GET/POST /api/incidents/{id}/approvals -> verified per-incident decision ledger
@@ -470,6 +471,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                     artifact, seal = narrate_incident_plan(
                         current_plan,
                         model=self.server.agent_model,
+                        provider=self.server.agent_provider,
                         incident_events=self.server.incidents.events(incident_id, after_revision),
                     )
                 except AgentBriefingError as error:
@@ -516,6 +518,7 @@ def make_server(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.
     server.approvals_lock = threading.Lock()
     server.request_timeout_seconds = REQUEST_TIMEOUT_SECONDS
     server.agent_model = os.environ.get("LIFELINE_AGENT_MODEL", "gpt-5")
+    server.agent_provider = os.environ.get("LIFELINE_AGENT_PROVIDER", "openai").strip().lower()
     server.incidents = IncidentStore(server.out_dir / "incidents.sqlite3")
     server.operators = OperatorStore(server.out_dir / "operators.sqlite3")
     return server

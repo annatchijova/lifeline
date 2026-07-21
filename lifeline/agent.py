@@ -1,4 +1,4 @@
-"""Optional, read-only OpenAI narration over already-sealed LIFELINE artifacts.
+"""Optional, read-only provider-assisted reading guides over sealed artifacts.
 
 This module is deliberately *outside* the planning and approval paths.  It can
 turn a verified plan and verification graph into a cited briefing for a human,
@@ -25,6 +25,17 @@ AGENT_BRIEFING_VERSION = 5
 AGENT_SEAL_VERSION = 3
 AUTHORITY_BOUNDARY = "INTERPRETIVE_ONLY"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+NVIDIA_CHAT_COMPLETIONS_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+
+# OpenAI remains the public/default hackathon integration.  NVIDIA is a local
+# development adapter for exercising the same closed reading-guide contract
+# when an OpenAI key is unavailable.  The sealed artifact records which one
+# actually supplied the citation selection.
+_PROVIDER_ARTIFACT_IDS = {
+    "openai": "openai_responses",
+    "nvidia": "nvidia_chat_completions",
+}
+_SUPPORTED_ARTIFACT_PROVIDERS = frozenset(_PROVIDER_ARTIFACT_IDS.values())
 
 
 class AgentBriefingError(ValueError):
@@ -667,10 +678,15 @@ def controlled_narration(packet: dict, guide: object) -> dict:
     }
 
 
-def openai_request_body(packet: dict, model: str) -> dict:
-    """Build a no-tools Responses request that sets ``store`` to false."""
+def _validated_model(model: str) -> str:
     if not isinstance(model, str) or not model.strip() or len(model) > 128:
         raise AgentBriefingError("model must be a non-empty short string")
+    return model.strip()
+
+
+def openai_request_body(packet: dict, model: str) -> dict:
+    """Build a no-tools Responses request that sets ``store`` to false."""
+    model = _validated_model(model)
     return {
         "model": model,
         "store": False,
@@ -692,6 +708,34 @@ def openai_request_body(packet: dict, model: str) -> dict:
     }
 
 
+def nvidia_request_body(packet: dict, model: str) -> dict:
+    """Build a no-tools, non-streaming NVIDIA Chat Completions request.
+
+    NVIDIA documents this endpoint as OpenAI Chat Completions compatible.  We
+    deliberately do not rely on provider-specific JSON-mode support: the
+    response is parsed then rejected unless it exactly satisfies the same
+    closed guide contract used for the OpenAI path.
+    """
+    model = _validated_model(model)
+    packet_text = json.dumps(packet, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return {
+        "model": model,
+        "stream": False,
+        "temperature": 0,
+        "max_tokens": 512,
+        "messages": [
+            {"role": "system", "content": SYSTEM_INSTRUCTIONS},
+            {
+                "role": "user",
+                "content": (
+                    "Return exactly one JSON object matching the reading-guide "
+                    "contract. Select opaque citations only from this sealed packet:\n" + packet_text
+                ),
+            },
+        ],
+    }
+
+
 def _response_output_text(response: object) -> str:
     if not isinstance(response, dict):
         raise AgentBriefingError("OpenAI response is not a JSON object")
@@ -709,6 +753,48 @@ def _response_output_text(response: object) -> str:
     raise AgentBriefingError("OpenAI response did not contain output text")
 
 
+def _nvidia_response_output_text(response: object) -> str:
+    if not isinstance(response, dict):
+        raise AgentBriefingError("NVIDIA response is not a JSON object")
+    choices = response.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise AgentBriefingError("NVIDIA response did not contain a completion choice")
+    message = choices[0].get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, str) or not content:
+        raise AgentBriefingError("NVIDIA response did not contain text content")
+    return content
+
+
+def _post_json_request(
+    url: str,
+    body: dict,
+    headers: dict[str, str],
+    *,
+    provider_label: str,
+    request_sender: Callable[[Request], bytes] | None,
+) -> object:
+    request = Request(
+        url,
+        data=json.dumps(body, separators=(",", ":"), ensure_ascii=True).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    try:
+        if request_sender is not None:
+            raw = request_sender(request)
+        else:
+            with urlopen(request, timeout=45) as response:
+                raw = response.read()
+        return json.loads(raw.decode("utf-8"))
+    except HTTPError as error:
+        raise AgentBriefingError(f"{provider_label} narration request failed with HTTP {error.code}") from error
+    except (URLError, TimeoutError) as error:
+        raise AgentBriefingError(f"{provider_label} narration request could not be completed") from error
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise AgentBriefingError(f"{provider_label} narration response was unreadable") from error
+
+
 def openai_select_reading_guide(
     packet: dict,
     *,
@@ -724,25 +810,11 @@ def openai_select_reading_guide(
     secret = api_key or os.environ.get("OPENAI_API_KEY")
     if not secret:
         raise AgentBriefingError("OPENAI_API_KEY is required for optional agent narration")
-    request = Request(
-        OPENAI_RESPONSES_URL,
-        data=json.dumps(openai_request_body(packet, model), separators=(",", ":"), ensure_ascii=True).encode("utf-8"),
-        headers={"Authorization": f"Bearer {secret}", "Content-Type": "application/json"},
-        method="POST",
+    response = _post_json_request(
+        OPENAI_RESPONSES_URL, openai_request_body(packet, model),
+        {"Authorization": f"Bearer {secret}", "Content-Type": "application/json"},
+        provider_label="OpenAI", request_sender=request_sender,
     )
-    try:
-        if request_sender is not None:
-            raw = request_sender(request)
-        else:
-            with urlopen(request, timeout=45) as response:
-                raw = response.read()
-        response = json.loads(raw.decode("utf-8"))
-    except HTTPError as error:
-        raise AgentBriefingError(f"OpenAI narration request failed with HTTP {error.code}") from error
-    except (URLError, TimeoutError) as error:
-        raise AgentBriefingError("OpenAI narration request could not be completed") from error
-    except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise AgentBriefingError("OpenAI narration response was unreadable") from error
     try:
         guide = json.loads(_response_output_text(response))
     except json.JSONDecodeError as error:
@@ -750,14 +822,51 @@ def openai_select_reading_guide(
     return validate_briefing_guide(guide, packet)
 
 
-def agent_artifact(inputs: AgentInputs, packet: dict, guide: object, *, model: str) -> dict:
+def nvidia_select_reading_guide(
+    packet: dict,
+    *,
+    model: str,
+    api_key: str | None = None,
+    request_sender: Callable[[Request], bytes] | None = None,
+) -> dict:
+    """Use NVIDIA only to select citations, then fail closed on its response."""
+    secret = api_key or os.environ.get("NVIDIA_API_KEY")
+    if not secret:
+        raise AgentBriefingError("NVIDIA_API_KEY is required for the NVIDIA development adapter")
+    response = _post_json_request(
+        NVIDIA_CHAT_COMPLETIONS_URL, nvidia_request_body(packet, model),
+        {"Authorization": f"Bearer {secret}", "Content-Type": "application/json"},
+        provider_label="NVIDIA", request_sender=request_sender,
+    )
+    try:
+        guide = json.loads(_nvidia_response_output_text(response))
+    except json.JSONDecodeError as error:
+        raise AgentBriefingError("NVIDIA reading guide was not valid JSON") from error
+    return validate_briefing_guide(guide, packet)
+
+
+def select_reading_guide(packet: dict, *, provider: str, model: str) -> dict:
+    """Dispatch to a configured provider without widening the output contract."""
+    if provider == "openai":
+        return openai_select_reading_guide(packet, model=model)
+    if provider == "nvidia":
+        return nvidia_select_reading_guide(packet, model=model)
+    raise AgentBriefingError("agent provider must be one of: openai, nvidia")
+
+
+def agent_artifact(
+    inputs: AgentInputs, packet: dict, guide: object, *, model: str, provider: str = "openai"
+) -> dict:
     """Bind a controlled, locally rendered reading guide to sealed inputs."""
     normalized_guide = validate_briefing_guide(guide, packet)
+    provider_id = _PROVIDER_ARTIFACT_IDS.get(provider)
+    if provider_id is None:
+        raise AgentBriefingError("agent provider must be one of: openai, nvidia")
     return {
         "agent_briefing_version": AGENT_BRIEFING_VERSION,
         "authority_boundary": AUTHORITY_BOUNDARY,
-        "provider": "openai_responses",
-        "model": model,
+        "provider": provider_id,
+        "model": _validated_model(model),
         "plan_sha256": inputs.plan_sha256,
         "verification_sha256": inputs.verification_sha256,
         "packet_sha256": seal_digest(packet),
@@ -793,8 +902,9 @@ def verify_agent_artifact(
         raise AgentBriefingError("agent briefing has an unsupported version")
     if artifact.get("authority_boundary") != AUTHORITY_BOUNDARY:
         raise AgentBriefingError("agent briefing does not preserve the interpretive-only authority boundary")
-    if artifact.get("provider") != "openai_responses" or not isinstance(artifact.get("model"), str):
+    if artifact.get("provider") not in _SUPPORTED_ARTIFACT_PROVIDERS:
         raise AgentBriefingError("agent briefing has an unsupported provider or model")
+    _validated_model(artifact.get("model"))
     if artifact.get("plan_sha256") != inputs.plan_sha256 or artifact.get("verification_sha256") != inputs.verification_sha256:
         raise AgentBriefingError("agent briefing is not bound to the current sealed inputs")
     packet = briefing_packet(inputs, incident_changes=artifact.get("incident_changes"))
@@ -824,12 +934,12 @@ def write_agent_artifact(out_dir: str | Path, artifact: dict) -> dict:
     return seal
 
 
-def narrate_export(out_dir: str | Path, *, model: str) -> tuple[dict, dict]:
-    """Create and write an OpenAI narration from verified local artifacts."""
+def narrate_export(out_dir: str | Path, *, model: str, provider: str = "openai") -> tuple[dict, dict]:
+    """Create and write a provider-assisted guide from verified local artifacts."""
     inputs = load_verified_inputs(out_dir)
     packet = briefing_packet(inputs)
-    guide = openai_select_reading_guide(packet, model=model)
-    artifact = agent_artifact(inputs, packet, guide, model=model)
+    guide = select_reading_guide(packet, provider=provider, model=model)
+    artifact = agent_artifact(inputs, packet, guide, model=model, provider=provider)
     return artifact, write_agent_artifact(out_dir, artifact)
 
 
@@ -837,6 +947,7 @@ def narrate_incident_plan(
     result: object,
     *,
     model: str,
+    provider: str = "openai",
     incident_events: Iterable[object] = (),
 ) -> tuple[dict, dict]:
     """Narrate one current incident-plan result without writing incident state.
@@ -847,8 +958,8 @@ def narrate_incident_plan(
     """
     inputs = verified_inputs_from_incident_plan(result)
     packet = briefing_packet(inputs, incident_events=incident_events)
-    guide = openai_select_reading_guide(packet, model=model)
-    artifact = agent_artifact(inputs, packet, guide, model=model)
+    guide = select_reading_guide(packet, provider=provider, model=model)
+    artifact = agent_artifact(inputs, packet, guide, model=model, provider=provider)
     return artifact, agent_seal(artifact)
 
 

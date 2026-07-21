@@ -13,6 +13,8 @@ from lifeline.agent import (
     incident_change_read_model,
     load_verified_inputs,
     narrate_export,
+    nvidia_request_body,
+    nvidia_select_reading_guide,
     openai_select_reading_guide,
     openai_request_body,
     narrate_incident_plan,
@@ -170,6 +172,60 @@ def test_openai_reading_guide_is_validated_before_writing(tmp_path):
     verify_agent_artifact(stored, inputs)
 
 
+def test_nvidia_adapter_uses_the_same_closed_guide_contract(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    inputs = load_verified_inputs(tmp_path)
+    packet = briefing_packet(inputs)
+    sent = {}
+
+    def sender(request):
+        sent["url"] = request.full_url
+        sent["headers"] = dict(request.header_items())
+        sent["body"] = json.loads(request.data.decode("utf-8"))
+        return json.dumps({"choices": [{"message": {"content": json.dumps(_guide(packet))}}]}).encode("utf-8")
+
+    guide = nvidia_select_reading_guide(
+        packet, model="nvidia/test-model", api_key="test-secret", request_sender=sender,
+    )
+    artifact = agent_artifact(inputs, packet, guide, model="nvidia/test-model", provider="nvidia")
+
+    assert sent["url"] == "https://integrate.api.nvidia.com/v1/chat/completions"
+    assert sent["headers"]["Authorization"] == "Bearer test-secret"
+    assert sent["body"]["stream"] is False
+    assert "tools" not in sent["body"]
+    assert sent["body"]["temperature"] == 0
+    assert artifact["provider"] == "nvidia_chat_completions"
+    verify_agent_artifact(artifact, inputs)
+
+
+def test_nvidia_adapter_rejects_non_guide_prose(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    packet = briefing_packet(load_verified_inputs(tmp_path))
+    with pytest.raises(AgentBriefingError, match="reading-guide contract"):
+        nvidia_select_reading_guide(
+            packet, model="nvidia/test-model", api_key="test-secret",
+            request_sender=lambda _request: json.dumps({
+                "choices": [{"message": {"content": json.dumps({
+                    "headline": "Dispatch now", "authority_boundary": AUTHORITY_BOUNDARY,
+                })}}],
+            }).encode("utf-8"),
+        )
+
+
+def test_nvidia_request_keeps_provider_packet_and_no_raw_report_strings(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    packet = briefing_packet(load_verified_inputs(tmp_path))
+    request = nvidia_request_body(packet, "nvidia/test-model")
+
+    assert request["messages"][0]["role"] == "system"
+    assert AUTHORITY_BOUNDARY in request["messages"][0]["content"]
+    assert "tools" not in request
+    assert "store" not in request
+    serialized = json.dumps(request).lower()
+    assert "nvidia_api_key" not in serialized
+    assert "test-secret" not in serialized
+
+
 def test_cli_path_requires_a_key_without_writing_an_agent_artifact(tmp_path, monkeypatch):
     export_plan(SCENARIO_PATH, tmp_path)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
@@ -258,6 +314,22 @@ def test_narrate_cli_refuses_without_a_key(tmp_path):
 
     assert result.returncode == 2
     assert "agent narration refused: OPENAI_API_KEY is required" in result.stderr
+    assert not (tmp_path / "agent_briefing.json").exists()
+
+
+def test_narrate_cli_selects_nvidia_and_refuses_without_its_key(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable, "-m", "lifeline", "narrate", "--out", str(tmp_path),
+            "--provider", "nvidia", "--model", "nvidia/test-model",
+        ],
+        cwd=REPO, capture_output=True, text=True,
+        env={"PATH": __import__("os").environ["PATH"]},
+    )
+
+    assert result.returncode == 2
+    assert "agent narration refused: NVIDIA_API_KEY is required" in result.stderr
     assert not (tmp_path / "agent_briefing.json").exists()
 
 
