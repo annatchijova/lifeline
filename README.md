@@ -71,6 +71,41 @@ approval recording, alert feeds, GeoJSON export, CRONOS-compatible tracing,
 sealed verification artifacts, and a verification CLI. The static judge demo
 is only the visible window into that larger lifecycle.
 
+## Repository at a glance
+
+LIFELINE is a working open-source research prototype, not a concept paper or
+an interface mock-up. At the current repository baseline it contains roughly
+**6,700 lines of Python** and **116 automated regression tests** across a
+deterministic planning kernel, authenticated local incident backend,
+simulation engine, sealed verification artifacts, CLI tooling, and browser
+operations surfaces.
+
+```text
+lifeline/
+├── lifeline/
+│   ├── core.py            # deterministic planning kernel
+│   ├── validators.py      # freshness, contradiction, and input gates
+│   ├── verification.py    # sealed Verification Graph
+│   ├── incidents.py       # append-only incident revisions
+│   ├── approvals.py       # human decision ledger
+│   ├── auth.py            # local operator roles
+│   ├── simulate.py        # explicit alternative scenarios
+│   ├── agent.py           # optional non-authoritative reading guide
+│   ├── export.py          # plan, GeoJSON, and seal artifacts
+│   └── server.py          # loopback incident-room backend
+├── web/                   # bilingual map room and operations console
+├── scenarios/             # synthetic flood scenario and alternatives
+├── tests/                 # automated regression and adversarial tests
+├── docs/                  # architecture, audits, demo, and limits
+├── tools/                 # reproducible demo-bundle tooling
+├── HACKATHON.MD           # judge links and end-to-end runbook
+└── README.md
+```
+
+The implementation is substantial without claiming operational maturity. See
+[`docs/PROTOTYPE_STATUS.md`](docs/PROTOTYPE_STATUS.md) for the evidence,
+limits, red-team scope, and next validation steps.
+
 ## What it is useful for
 
 LIFELINE is designed for situations where many people must coordinate from
@@ -92,21 +127,40 @@ In every case, the system answers: *what was reported, what was corroborated,
 what conflicts, what is missing, what could be proposed, and who approved it?*
 It does not answer: *which human life is worth more?*
 
-## Important status and safety boundary
+## Prototype status, evidence, and safety boundary
 
-LIFELINE has a carefully tested implementation and an adversarial test suite,
-but it has **not been used in real incidents** and is not validated for live
-emergency operations. The included flood scenario, reports, identities,
-routes, capacities, and decisions are synthetic. They exist to demonstrate the
-architecture and its failure modes, not to represent real people or current
-field conditions.
+LIFELINE is a fully functional **research and hackathon prototype** with a
+synthetic end-to-end scenario: report ingestion, deterministic validation,
+incident revisions, planning, simulation, human approval, export, offline
+verification, and an optional cited reading guide have all been exercised
+locally. Focused red-team rounds reproduced and fixed security issues in
+approval concurrency, bootstrap races, artifact/static-file boundaries, HTTP
+request handling, and the optional agent boundary. Their methods, findings,
+fixes, and falsified vectors are published in [`docs/`](docs/).
 
-This repository is a research and hackathon prototype. It must not replace
-official emergency services, an incident command system, professional advice,
-or local operational procedures. A future deployment would require field
-validation, threat modeling with operators, accessibility and language review,
-identity and authorization design, resilience testing, governance, and formal
-acceptance by the responsible organization.
+That evidence has clear limits. LIFELINE has **not been used in real
+incidents**, is not field-validated, and does not claim to be production-ready
+or safe for live emergency operations. The included flood scenario, reports,
+identities, routes, capacities, and decisions are synthetic. They demonstrate
+architecture and failure modes; they do not represent real people or current
+field conditions. The red-team work is focused security hardening, not an
+exhaustive invariant, resilience, accessibility, or organizational-governance
+assessment.
+
+The next research steps are broader synthetic and adversarial scenario
+campaigns, deeper invariant and recovery testing, operator-centered review,
+and only then carefully governed evaluation with appropriately authorized real
+incident data. Any future deployment would also require identity governance,
+accessibility and language review, resilience testing, local protocol design,
+and formal acceptance by the responsible organization.
+
+Read the evidence directly: [`Prototype Status and Validation Roadmap`](docs/PROTOTYPE_STATUS.md),
+[`Verification Artifact`](docs/VERIFICATION_ARTIFACT.md),
+[`Agent Briefing Mode`](docs/AGENT_BRIEFING_MODE.md), and the published
+[`red-team audits`](docs/RED_TEAM_AUDIT_2026-07-19.md).
+
+This repository must not replace official emergency services, an incident
+command system, professional advice, or local operational procedures.
 
 ## Three commitments — written into the code, not just the pitch
 

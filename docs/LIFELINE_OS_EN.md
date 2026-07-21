@@ -32,6 +32,16 @@ orders, or provide operational advice as an authority.
 
 If the model is unavailable, the plan and its audit trail still exist.
 
+## Prototype boundary and path to validation
+
+LIFELINE is working open-source research software, demonstrated through an
+end-to-end synthetic incident lifecycle and focused adversarial security
+rounds. It is not a field-validated emergency service, and it has not been
+used in a real incident. The next work is broader synthetic and invariant
+testing, tabletop/operator review, and only then governed evaluation with
+appropriately authorized real incident data. See
+[`PROTOTYPE_STATUS.md`](PROTOTYPE_STATUS.md) for the exact evidence and limits.
+
 ## Evidence is not narrative
 
 During a flood, incompatible claims may coexist:

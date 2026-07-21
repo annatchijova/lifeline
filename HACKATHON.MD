@@ -4,6 +4,11 @@ This file is the practical submission and demo runbook for LIFELINE. It is a
 research and hackathon prototype using synthetic data only; it has not been
 used in real incidents and is not an emergency service.
 
+For the precise maturity claim behind the submission, read
+[`docs/PROTOTYPE_STATUS.md`](docs/PROTOTYPE_STATUS.md). It distinguishes the
+working synthetic prototype, published red-team evidence, current limits, and
+the next validation steps.
+
 ## Submission and session references
 
 - `genial`: `019f6fec-10f8-78d2-b060-c96c3ed6a718`
