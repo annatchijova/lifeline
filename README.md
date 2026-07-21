@@ -335,29 +335,6 @@ demo values as operational facts.
 }
 ```
 
-## Captured local screens
-
-These screenshots show the local synthetic workflow: typed report ingestion,
-the controlled cited Agent Briefing, and the sealed incident room. They are
-evidence of the prototype interface, not evidence of a real incident.
-
-<details>
-<summary>Open the six captured local screens</summary>
-
-![Operations console with typed report form](<visual/Screenshot%20from%202026-07-21%2011-47-07.png>)
-
-![Controlled agent briefing rendered in the local operations console](<visual/Screenshot%20from%202026-07-21%2011-59-40.png>)
-
-![Agent briefing observations and deterministic evidence citations](<visual/Screenshot%20from%202026-07-21%2011-59-44.png>)
-
-![Agent briefing questions for human review](<visual/Screenshot%20from%202026-07-21%2011-59-48.png>)
-
-![Sealed local incident room with the controlled agent briefing](<visual/Screenshot%20from%202026-07-21%2011-59-55.png>)
-
-![Evidence citations and human questions in the incident room](<visual/Screenshot%20from%202026-07-21%2012-00-00.png>)
-
-</details>
-
 | Step | OpenAI can do | LIFELINE still controls |
 | --- | --- | --- |
 | Before egress | Nothing | Verifies the plan, verification graph, and their seals locally. |
@@ -378,8 +355,7 @@ python3 -m pip install -e .
 lifeline plan scenarios/flood_v1.json --out out --reference-time 2026-07-17T11:00:00Z
 ```
 
-LIFELINE is released under the [Apache License 2.0](LICENSE). See
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for the engineering contract and
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the engineering contract and
 [`SECURITY.md`](SECURITY.md) for the current prototype boundary. The governed
 human-led, Codex-assisted development workflow is documented in
 [`docs/CODEX_COLLABORATION.md`](docs/CODEX_COLLABORATION.md).
@@ -579,3 +555,32 @@ See [LIFELINE OS (English)](docs/LIFELINE_OS_EN.md),
 [verification artifact contract](docs/VERIFICATION_ARTIFACT.md) for the
 product architecture, ethical boundaries, simulation model, and the research
 patterns that inform it.
+
+## Captured local screens
+
+These screenshots show the local synthetic workflow: typed report ingestion,
+the controlled cited Agent Briefing, and the sealed incident room. They are
+evidence of the prototype interface, not evidence of a real incident.
+
+<details>
+<summary>Open the six captured local screens</summary>
+
+![Operations console with typed report form](<visual/Screenshot%20from%202026-07-21%2011-47-07.png>)
+
+![Controlled agent briefing rendered in the local operations console](<visual/Screenshot%20from%202026-07-21%2011-59-40.png>)
+
+![Agent briefing observations and deterministic evidence citations](<visual/Screenshot%20from%202026-07-21%2011-59-44.png>)
+
+![Agent briefing questions for human review](<visual/Screenshot%20from%202026-07-21%2011-59-48.png>)
+
+![Sealed local incident room with the controlled agent briefing](<visual/Screenshot%20from%202026-07-21%2011-59-55.png>)
+
+![Evidence citations and human questions in the incident room](<visual/Screenshot%20from%202026-07-21%2012-00-00.png>)
+
+</details>
+
+---
+
+LIFELINE is released under the [Apache License 2.0](LICENSE).
+
+Developed on Linux with Codex, ChatGPT 5.6 Terra, and Luna.
