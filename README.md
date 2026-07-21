@@ -8,16 +8,22 @@ road is still open. Which shelter still has room. Which boat already left, and
 where it went. The facts exist — scattered across radios, spreadsheets, and the
 memory of exhausted people. No one can see them whole, in time.
 
+That gap is **operational fog**: the distance between what happened, what was
+reported, what was verified, and what people believe is true. During an
+incident, minutes are not only a measurement of time; they are a measurement of
+how far that uncertainty can propagate. Every unverified report, outdated map,
+and disconnected decision widens the gap.
+
 The tempting fix is to hand the whole mess to an algorithm and let it decide who
 gets rescued first. **LIFELINE refuses to do that — on purpose.**
 
 LIFELINE is open infrastructure for humanitarian coordination that makes the
-truth *inspectable* and leaves the decision with a human. It turns verified
-operational facts — requests for help, available resources, open routes, shelter
-capacity — into a transparent, reproducible dispatch **proposal**. Then it
-stops. It never sends a responder. It never ranks whose life matters more. It
-never claims to predict who survives. A coordinator makes every call and carries
-every consequence — but now they can see the whole board while they do.
+available operational picture *inspectable* and leaves the decision with a
+human. It turns verified operational facts — requests for help, available
+resources, open routes, shelter capacity — into a transparent, reproducible
+dispatch **proposal**. Then it stops. A coordinator makes every call and
+carries every consequence — but now they can see the evidence, uncertainty,
+and constraints behind the board while they do.
 
 Because when a machine gets a disaster decision wrong, *"the algorithm chose"* is
 not an answer anyone can live with. So LIFELINE is built the other way around: a
@@ -45,15 +51,35 @@ planning kernel → simulations / alternatives
 human approval → audit ledger → export + offline verification
 ```
 
+The first instinct is to build a better map. But a map cannot tell a
+coordinator which information deserves trust. LIFELINE is built for the moment
+when information stops agreeing with itself: it maintains a shared operational
+picture of what is known, what is uncertain, and what still needs verification.
+
+Its architecture follows three commitments:
+
+- **Because uncertainty cannot be removed, LIFELINE does not hide it.**
+  Contradictions, staleness, and missing evidence remain explicit.
+- **Because accountability cannot be delegated, LIFELINE does not automate the
+  final decision.** It produces inspectable proposals for accountable humans.
+- **Because facts change, LIFELINE does not overwrite history.** Reports create
+  revisions, and decisions bind to an exact sealed plan.
+
 ## Why this project exists
 
-LIFELINE grew out of a deliberate challenge. Its creator usually uses ChatGPT
-to think through forensic and legal systems, where provenance, contradictory
-accounts, auditability, and human responsibility are central. She asked
-ChatGPT for ten directions that would force her out of that domain; three of
-them felt worth pursuing and were combined into one question: how can an
-emergency-coordination system make uncertainty visible without handing a life
-and safety decision to an algorithm?
+LIFELINE grew out of a deliberate challenge and a real observation. Its
+creator has seen the chaos surrounding wildfires closely enough to understand
+that the fire itself is only one part of the emergency: roads become unusable,
+resources are committed elsewhere, visibility changes, reports conflict, and
+people must act from different fragments of reality. The same pattern appears
+in floods, storms, evacuations, and humanitarian emergencies.
+
+She usually uses ChatGPT to think through forensic and legal systems, where
+provenance, contradictory accounts, auditability, and human responsibility are
+central. She asked ChatGPT for ten directions that would force her out of that
+domain; three of them converged into one question: how can the principles of
+evidence preservation, provenance, and accountability help emergency
+coordination without handing a life-and-safety decision to an algorithm?
 
 The idea was developed by asking what could make incomplete, contradictory,
 time-sensitive information useful without pretending that an algorithm should
@@ -70,6 +96,11 @@ source of truth for what the system does. The project uses synthetic data and
 has not been used in real incidents. See
 [`docs/CODEX_COLLABORATION.md`](docs/CODEX_COLLABORATION.md) for the division
 of responsibility and review method.
+
+It is open source because people facing a crisis should not need permission
+from a vendor to understand, inspect, adapt, or improve the tools they depend
+on. Emergency-coordination technology should be auditable by the people and
+organizations who rely on it.
 
 The product surface includes an incident backend, local authenticated
 coordinators, typed report ingestion, role boundaries, a live operations room,
