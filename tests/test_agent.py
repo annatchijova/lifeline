@@ -212,6 +212,28 @@ def test_nvidia_adapter_rejects_non_guide_prose(tmp_path):
         )
 
 
+def test_nvidia_adapter_accepts_only_a_complete_json_fence(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    packet = briefing_packet(load_verified_inputs(tmp_path))
+    fenced = "```json\n" + json.dumps(_guide(packet)) + "\n```"
+
+    guide = nvidia_select_reading_guide(
+        packet, model="nvidia/test-model", api_key="test-secret",
+        request_sender=lambda _request: json.dumps({
+            "choices": [{"message": {"content": fenced}}],
+        }).encode("utf-8"),
+    )
+    assert guide == _guide(packet)
+
+    with pytest.raises(AgentBriefingError, match="not valid JSON"):
+        nvidia_select_reading_guide(
+            packet, model="nvidia/test-model", api_key="test-secret",
+            request_sender=lambda _request: json.dumps({
+                "choices": [{"message": {"content": "Here is the guide:\n" + fenced}}],
+            }).encode("utf-8"),
+        )
+
+
 def test_nvidia_request_keeps_provider_packet_and_no_raw_report_strings(tmp_path):
     export_plan(SCENARIO_PATH, tmp_path)
     packet = briefing_packet(load_verified_inputs(tmp_path))

@@ -729,7 +729,8 @@ def nvidia_request_body(packet: dict, model: str) -> dict:
                 "role": "user",
                 "content": (
                     "Return exactly one JSON object matching the reading-guide "
-                    "contract. Select opaque citations only from this sealed packet:\n" + packet_text
+                    "contract. Do not add explanation, Markdown, or code fences. "
+                    "Select opaque citations only from this sealed packet:\n" + packet_text
                 ),
             },
         ],
@@ -764,6 +765,26 @@ def _nvidia_response_output_text(response: object) -> str:
     if not isinstance(content, str) or not content:
         raise AgentBriefingError("NVIDIA response did not contain text content")
     return content
+
+
+def _parse_nvidia_guide_text(text: str) -> object:
+    """Parse raw JSON or one exact Markdown JSON fence, then validate later.
+
+    Some Chat Completions models wrap an otherwise exact JSON object in a
+    single `````json`` fence despite an explicit instruction not to do so.  We
+    accept only that complete wrapper; leading commentary, trailing prose, and
+    arbitrary JSON extraction remain rejected.  The resulting value still has
+    to pass :func:`validate_briefing_guide`'s closed schema and citation set.
+    """
+    candidate = text.strip()
+    if candidate.startswith("```json\n") and candidate.endswith("\n```"):
+        candidate = candidate[len("```json\n"):-len("\n```")]
+    elif candidate.startswith("```\n") and candidate.endswith("\n```"):
+        candidate = candidate[len("```\n"):-len("\n```")]
+    try:
+        return json.loads(candidate)
+    except json.JSONDecodeError as error:
+        raise AgentBriefingError("NVIDIA reading guide was not valid JSON") from error
 
 
 def _post_json_request(
@@ -838,10 +859,7 @@ def nvidia_select_reading_guide(
         {"Authorization": f"Bearer {secret}", "Content-Type": "application/json"},
         provider_label="NVIDIA", request_sender=request_sender,
     )
-    try:
-        guide = json.loads(_nvidia_response_output_text(response))
-    except json.JSONDecodeError as error:
-        raise AgentBriefingError("NVIDIA reading guide was not valid JSON") from error
+    guide = _parse_nvidia_guide_text(_nvidia_response_output_text(response))
     return validate_briefing_guide(guide, packet)
 
 
