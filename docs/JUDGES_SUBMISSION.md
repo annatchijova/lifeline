@@ -12,6 +12,25 @@ partial, stale, and contradictory operational reports into inspectable plans,
 explicit evidence gaps, human approvals, and independently verifiable audit
 artifacts.
 
+## Origin story
+
+The project began as a deliberate change of direction. Its creator usually
+uses ChatGPT to think through forensic and legal systems, where provenance,
+contradictory accounts, auditability, and human responsibility are central.
+She challenged the collaboration to build something genuinely different from
+that work: a serious emergency-coordination system, not a renamed forensic
+tool and not merely a beautiful demo.
+
+The idea was developed iteratively: first the human-accountability boundary,
+then the evidence and verification model, then the incident lifecycle, and
+finally a synthetic scenario serious enough to expose hard cases rather than
+just produce a polished screen.
+
+The system was built in Codex on Linux with ChatGPT 5.6 Terra and Luna. Those
+names describe the working agents used during the build; the repository is the
+source of truth. Design claims are backed by code, tests, generated artifacts,
+and adversarial review rather than by the conversation alone.
+
 ## The problem
 
 During an emergency, the problem is often not the absence of information but
