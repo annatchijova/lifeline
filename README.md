@@ -248,6 +248,116 @@ is authenticated and cannot alter the incident. See
 [`docs/AGENT_BRIEFING_MODE.md`](docs/AGENT_BRIEFING_MODE.md) for the contract,
 local setup, and verification boundary.
 
+## Try it yourself: append a typed incident report
+
+The static demo already includes a sealed Agent Briefing artifact so that the
+purple panel is visible without an API key. A fresh local export starts without
+one by design: first create or load an incident, compute and verify its plan,
+and then optionally run `lifeline narrate`. The deterministic lifecycle never
+depends on the agent.
+
+To add reports through the local Operations console, start a local room, open
+`http://127.0.0.1:8094/web/ops.html`, select the incident, choose the report
+type, click **Fill template**, replace every value, and click **Append report**.
+Use **Supersede with correction** only when correcting an existing entity: it
+creates a new revision while preserving the previous report in the ledger.
+
+Every report requires provenance:
+
+- `source` and `source_type`: who or what reported it, and what kind of source it was;
+- `observed_at`: an ISO 8601 timestamp with timezone, for example
+  `2026-07-21T12:00:00Z`;
+- `verification_state`: exactly `verified`, `unverified`, or `conflicting`;
+- `freshness`: exactly `high`, `medium`, or `low`;
+- every zone field must match a zone already present in the incident.
+
+These are complete copy/paste examples for the bundled flood scenario. Replace
+the identifiers and facts with your own incident data; do not use synthetic
+demo values as operational facts.
+
+```json
+{
+  "request_id": "family-west",
+  "people": 3,
+  "urgency": 4,
+  "medical_need": false,
+  "pickup_zone": "north-bank",
+  "destination_zone": "shelter-a",
+  "source": "operator-12",
+  "source_type": "verified_operator",
+  "observed_at": "2026-07-21T12:00:00Z",
+  "verification_state": "verified",
+  "freshness": "high"
+}
+```
+
+```json
+{
+  "resource_id": "boat-03",
+  "kind": "boat",
+  "capacity": 6,
+  "available": true,
+  "can_transport_medical": false,
+  "zone": "boat-base",
+  "source": "fleet-registry",
+  "source_type": "institutional",
+  "observed_at": "2026-07-21T12:00:00Z",
+  "verification_state": "verified",
+  "freshness": "high"
+}
+```
+
+```json
+{
+  "shelter_id": "shelter-c",
+  "zone": "shelter-a",
+  "beds_open": 8,
+  "open": true,
+  "source": "shelter-manager-c",
+  "source_type": "institutional",
+  "observed_at": "2026-07-21T12:00:00Z",
+  "verification_state": "verified",
+  "freshness": "high"
+}
+```
+
+```json
+{
+  "origin": "north-bank",
+  "destination": "shelter-a",
+  "eta_minutes": 8,
+  "open": true,
+  "source": "patrol-12",
+  "source_type": "responder",
+  "observed_at": "2026-07-21T12:00:00Z",
+  "verification_state": "verified",
+  "freshness": "high"
+}
+```
+
+## Captured local screens
+
+These screenshots show the local synthetic workflow: typed report ingestion,
+the controlled cited Agent Briefing, and the sealed incident room. They are
+evidence of the prototype interface, not evidence of a real incident.
+
+<details>
+<summary>Open the six captured local screens</summary>
+
+![Operations console with typed report form](<visual/Screenshot%20from%202026-07-21%2011-47-07.png>)
+
+![Controlled agent briefing rendered in the local operations console](<visual/Screenshot%20from%202026-07-21%2011-59-40.png>)
+
+![Agent briefing observations and deterministic evidence citations](<visual/Screenshot%20from%202026-07-21%2011-59-44.png>)
+
+![Agent briefing questions for human review](<visual/Screenshot%20from%202026-07-21%2011-59-48.png>)
+
+![Sealed local incident room with the controlled agent briefing](<visual/Screenshot%20from%202026-07-21%2011-59-55.png>)
+
+![Evidence citations and human questions in the incident room](<visual/Screenshot%20from%202026-07-21%2012-00-00.png>)
+
+</details>
+
 | Step | OpenAI can do | LIFELINE still controls |
 | --- | --- | --- |
 | Before egress | Nothing | Verifies the plan, verification graph, and their seals locally. |

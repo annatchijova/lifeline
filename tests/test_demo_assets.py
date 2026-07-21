@@ -12,6 +12,7 @@ def test_bundled_demo_is_complete_and_sealed():
     required = {
         "plan.json", "plan.seal.json", "verification.json", "verification.seal.json",
         "room.geojson", "simulation.json", "simulation.seal.json",
+        "agent_briefing.json", "agent_briefing.seal.json",
     }
     assert required <= {path.name for path in DEMO.iterdir()}
 
@@ -19,11 +20,16 @@ def test_bundled_demo_is_complete_and_sealed():
     seal = json.loads((DEMO / "plan.seal.json").read_text(encoding="utf-8"))
     verification = json.loads((DEMO / "verification.json").read_text(encoding="utf-8"))
     verification_seal = json.loads((DEMO / "verification.seal.json").read_text(encoding="utf-8"))
+    agent = json.loads((DEMO / "agent_briefing.json").read_text(encoding="utf-8"))
+    agent_seal = json.loads((DEMO / "agent_briefing.seal.json").read_text(encoding="utf-8"))
     room = json.loads((DEMO / "room.geojson").read_text(encoding="utf-8"))
 
     assert seal_digest(plan) == seal["sha256"]
     assert seal_digest(verification) == verification_seal["sha256"]
     assert verification["plan_sha256"] == seal["sha256"]
+    assert seal_digest(agent) == agent_seal["sha256"]
+    assert agent["plan_sha256"] == seal["sha256"]
+    assert agent["verification_sha256"] == verification_seal["sha256"]
     assert room["type"] == "FeatureCollection"
     assert room["features"]
 
@@ -37,6 +43,8 @@ def test_browser_fallback_matches_the_sealed_demo_artifacts():
     assert payload["verification"] == json.loads((DEMO / "verification.json").read_text(encoding="utf-8"))
     assert payload["verificationSeal"] == json.loads((DEMO / "verification.seal.json").read_text(encoding="utf-8"))
     assert payload["room"] == json.loads((DEMO / "room.geojson").read_text(encoding="utf-8"))
+    assert payload["agent"] == json.loads((DEMO / "agent_briefing.json").read_text(encoding="utf-8"))
+    assert payload["agentSeal"] == json.loads((DEMO / "agent_briefing.seal.json").read_text(encoding="utf-8"))
 
 
 def test_room_defaults_to_demo_and_live_mode_has_a_demo_fallback():

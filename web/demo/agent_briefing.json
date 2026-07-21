@@ -1,0 +1,149 @@
+{
+  "agent_briefing_version": 5,
+  "authority_boundary": "INTERPRETIVE_ONLY",
+  "guide": {
+    "authority_boundary": "INTERPRETIVE_ONLY",
+    "focus_citations": [
+      "proposal:0",
+      "proposal:1",
+      "proposal:2",
+      "proposal:3"
+    ],
+    "question_citations": [
+      "verification:2",
+      "finding:0",
+      "finding:1",
+      "finding:2",
+      "finding:3",
+      "finding:4",
+      "finding:5",
+      "finding:6",
+      "finding:7",
+      "finding:8"
+    ]
+  },
+  "incident_changes": [],
+  "limitations": [
+    "This is an optional interpretation layer, not a planning or approval artifact.",
+    "The agent received no mutation, approval, dispatch, or external-alert tool.",
+    "The provider selected opaque citations; all displayed prose was rendered locally from sealed values."
+  ],
+  "model": "meta/llama-3.1-8b-instruct",
+  "narration": {
+    "authority_boundary": "INTERPRETIVE_ONLY",
+    "headline": "Sealed incident: 2 proposal(s) await a human decision; 2 require evidence review.",
+    "headline_citations": [
+      "proposal:0",
+      "proposal:1",
+      "proposal:2",
+      "proposal:3",
+      "verification:0",
+      "verification:1",
+      "verification:2",
+      "verification:3"
+    ],
+    "observations": [
+      {
+        "citations": [
+          "proposal:0"
+        ],
+        "text": "Sealed proposal 1 has status PROPOSED. Sealed metrics: people=4, urgency=5, eta_minutes=19."
+      },
+      {
+        "citations": [
+          "proposal:1"
+        ],
+        "text": "Sealed proposal 2 has status NEEDS_HUMAN_REVIEW. Sealed metrics: people=6, urgency=5."
+      },
+      {
+        "citations": [
+          "proposal:2"
+        ],
+        "text": "Sealed proposal 3 has status PROPOSED. Sealed metrics: people=3, urgency=4, eta_minutes=21."
+      },
+      {
+        "citations": [
+          "proposal:3"
+        ],
+        "text": "Sealed proposal 4 has status NEEDS_HUMAN_REVIEW. Sealed metrics: people=2, urgency=3."
+      }
+    ],
+    "questions_for_human": [
+      {
+        "citations": [
+          "verification:2"
+        ],
+        "question": "What does the cited Verification Graph leave unresolved for human review?"
+      },
+      {
+        "citations": [
+          "finding:0"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      },
+      {
+        "citations": [
+          "finding:1"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      },
+      {
+        "citations": [
+          "finding:2"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      },
+      {
+        "citations": [
+          "finding:3"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      },
+      {
+        "citations": [
+          "finding:4"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      },
+      {
+        "citations": [
+          "finding:5"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      },
+      {
+        "citations": [
+          "finding:6"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      },
+      {
+        "citations": [
+          "finding:7"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      },
+      {
+        "citations": [
+          "finding:8"
+        ],
+        "question": "Can a human corroborate or correct the cited validation finding?"
+      }
+    ],
+    "situation_summary": "The deterministic kernel evaluated 4 proposal(s), with 9 validation warning(s) and 0 informational finding(s). This reading guide is not a priority order or an instruction.",
+    "summary_citations": [
+      "proposal:0",
+      "proposal:1",
+      "proposal:2",
+      "proposal:3",
+      "verification:0",
+      "verification:1",
+      "verification:2",
+      "verification:3"
+    ]
+  },
+  "packet_sha256": "e36f707c724818452487a6a6c9708802fc503c290fa8fe0c74fb708569df3e40",
+  "plan_sha256": "4282ba2fb5153cb2480ce5b19d3b55a4a78204c8932fb8d7cff97871a8c0cba7",
+  "provider": "nvidia_chat_completions",
+  "verification_sha256": "fcbf4dde37adc6b9b3118eceda0b95db193374a37d7ae42ae6851c678a11bcbb"
+}
