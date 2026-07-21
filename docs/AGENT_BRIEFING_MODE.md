@@ -13,21 +13,28 @@ sealed plan + verification graph
               ↓
    optional OpenAI Responses call
               ↓
+opaque citation reading guide
+              ↓
+local controlled-language renderer
+              ↓
 cited agent_briefing.json (separate seal)
               ↓
           human coordinator
 ```
 
 The deterministic kernel remains authoritative for feasibility. The
-Verification Graph remains authoritative for evidence gaps. The agent may only
-explain those artifacts in natural language with supplied citation IDs.
+Verification Graph remains authoritative for evidence gaps. The provider does
+not return free-form narration: it may only select supplied opaque citation
+IDs. LIFELINE sorts those selections into canonical packet order and renders
+every displayed sentence locally from sealed typed values and fixed templates.
 
 It cannot:
 
 - create or alter incidents, reports, revisions, findings, plans, or
   simulations;
 - change verification or freshness states;
-- choose a resource, rank people, recommend a dispatch, or issue instructions;
+- choose a resource, rank people, recommend a dispatch, or issue instructions
+  through briefing prose (the provider has no prose field);
 - approve or reject a proposal;
 - send alerts or contact external channels;
 - access operator tokens, approval ledgers, mutable incident state, or API
@@ -55,8 +62,8 @@ read model from the verified event ledger. Each change names its revision,
 event type, entity class, and immutable event hash. Report payloads are reduced
 to non-textual values and closed enums before they reach the model; source,
 timestamp, zone, identifier, and other raw report content are not forwarded.
-This lets the agent explain *what changed since a revision* without treating an
-untrusted report string as instructions.
+This lets the reading guide surface *what changed since a revision* without
+treating an untrusted report string as instructions.
 
 ## OpenAI request policy
 
@@ -68,12 +75,19 @@ The implementation uses the OpenAI Responses API with:
 - no OpenAI built-in tools;
 - no custom function tools;
 - an explicit `INTERPRETIVE_ONLY` authority boundary;
-- a requirement that the headline, summary, every observation, and every
-  question cite packet evidence.
+- a strict schema whose only provider-controlled values are opaque citation
+  selections.
 
 The code validates the returned JSON again locally. Unknown citations, missing
-citations, unexpected fields, malformed values, or an authority-boundary change
-reject the narration before it is written.
+required focus citations, duplicates, unexpected fields, malformed values, or
+an authority-boundary change reject the guide before any artifact exists. It
+then generates the headline, summary, observations, and human questions
+locally. Verification recomputes that controlled rendering; a re-sealed
+artifact with altered prose fails verification.
+
+The guide is not a priority order. Its citations are normalized to the
+deterministic packet order, and the complete deterministic Verification Graph
+remains visible beside it.
 
 ## Generate a briefing
 
@@ -103,7 +117,8 @@ out/
 
 The artifact is separately sealed and binds its own packet digest to the exact
 plan and Verification Graph digests. `lifeline verify --out out` checks that
-binding as well as the narration's citation and authority contract.
+binding, the opaque guide's citation contract, and the exact controlled
+rendering.
 
 Open the local room afterwards:
 
@@ -112,11 +127,11 @@ python3 -m lifeline serve --out out --port 8094
 ```
 
 Then visit `http://127.0.0.1:8094/web/room.html?mode=live`. The purple Agent
-Briefing panel shows the cited output only if its browser-verifiable seal and
-input bindings match. The local operations console performs the same digest,
-version, and input-binding checks before it displays its short-lived response.
-Without an artifact, the deterministic room works normally and labels the
-feature as optional.
+Briefing panel shows the controlled, cited output only if its browser-verifiable
+seal and input bindings match. The local operations console performs the same
+digest, version, and input-binding checks before it displays its short-lived
+response. Without an artifact, the deterministic room works normally and
+labels the feature as optional.
 
 ## Generate from Local Operations
 
@@ -128,15 +143,16 @@ calls:
 POST /api/incidents/{incident_id}/agent-briefing
 ```
 
-This route requires a local `coordinator` token even though the returned text
+This route requires a local `coordinator` token even though the returned guide
 has no operational authority. The reason is data egress: the route sends the
 same minimal sealed packet to the optional external provider. It does not
 write a report, revision, plan, approval, alert, or dispatch record. The
 response contains a separately sealed short-lived artifact for the current
-incident plan; recomputing a plan requires a new narration request. By default
+incident plan; recomputing a plan requires a new briefing request. By default
 the endpoint includes the latest event only (`after_revision = current - 1`).
-The operations UI supplies that value explicitly, so the result can say what
-changed between the immediately preceding revision and the current plan.
+The operations UI supplies that value explicitly, so the locally rendered guide
+can expose what changed between the immediately preceding revision and the
+current plan.
 
 The server chooses the model through `LIFELINE_AGENT_MODEL` (default `gpt-5`),
 not from browser input. This keeps model selection out of untrusted client
@@ -146,18 +162,18 @@ unchanged.
 
 ## What verification does and does not prove
 
-The seal proves that the recorded narration and its declared input bindings
-were not altered after sealing. The contract proves that its citations came
-from the supplied sealed packet and that its declared role stayed
-interpretive-only.
+The seal proves that the recorded controlled briefing and its declared input
+bindings were not altered after sealing. The contract proves that its citation
+guide came from the supplied sealed packet, that its declared role stayed
+interpretive-only, and that every displayed sentence equals LIFELINE's local
+template rendering.
 
-Neither mechanism proves that model prose is true, complete, or appropriate
-for an operational context. The model may still misunderstand a fact inside its
-allowed packet. This is why the output is visibly non-authoritative and why no
-other LIFELINE component reads it as input.
+Neither mechanism proves that the provider selected the most useful or complete
+citations. This is why the guide is visibly non-authoritative, is not a priority
+order, and is never read as input by another LIFELINE component.
 
 ## Demo line
 
 > The deterministic kernel decides what evidence is admissible. The optional
-> OpenAI agent helps a person understand that evidence, with citations, but it
-> cannot change the plan or make the decision.
+> OpenAI guide can point a person to sealed evidence, while LIFELINE renders
+> the words locally. Neither can change the plan or make the decision.

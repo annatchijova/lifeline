@@ -79,13 +79,13 @@ scenario data, applies declared constraints, exports a sealed plan, and records
 human approvals separately. Codex does not run inside that path and does not
 choose resources, priorities, routes, or actions.
 
-An optional language model may narrate only a completed, locally verified plan
-and Verification Graph under an explicit policy. It must never be allowed to
-invent facts, upgrade evidence, alter a plan, or issue instructions as an
-operational authority. Agent Briefing Mode receives no mutation or approval
-tools; it produces a separately sealed, cited interpretation bound to its
-inputs. If it is unavailable, the deterministic plan and its audit trail still
-exist. See [`AGENT_BRIEFING_MODE.md`](AGENT_BRIEFING_MODE.md).
+An optional language model may select opaque evidence references only after a
+plan and Verification Graph are locally verified. It cannot introduce briefing
+prose: LIFELINE renders every displayed sentence locally from sealed values and
+fixed templates. Agent Briefing Mode receives no mutation or approval tools and
+produces a separately sealed, cited reading guide bound to its inputs. If it is
+unavailable, the deterministic plan and its audit trail still exist. See
+[`AGENT_BRIEFING_MODE.md`](AGENT_BRIEFING_MODE.md).
 
 ## Evidence and limits of this note
 

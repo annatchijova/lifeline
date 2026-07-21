@@ -142,29 +142,38 @@ capability; and verified, non-stale remaining capacity at the request's
 declared destination. It records why a request could not be proposed. It
 never sends a dispatch.
 
-An optional language model may narrate a completed, verified plan from its
-recorded evidence. It must not select, reorder, or invent
-resources, routes, requests, or advice.
+An optional language model may select opaque evidence references for a
+completed, verified plan. LIFELINE renders every visible sentence locally from
+the sealed packet and fixed templates; the provider cannot supply resource
+names, routes, requests, advice, or operational instructions as prose.
 
 ## Optional Agent Briefing Mode
 
 For the OpenAI hackathon, LIFELINE includes an optional OpenAI interpretation
 layer. `lifeline narrate --out out` first verifies the completed plan and
 Verification Graph locally, then sends a closed, read-only packet to the
-Responses API. The returned briefing must be structured, cite only supplied
-evidence, and declare `INTERPRETIVE_ONLY`; it is written as a separate sealed
-artifact bound to the plan and verification hashes.
+Responses API. The provider returns only a structured selection of supplied
+opaque citation IDs with `INTERPRETIVE_ONLY`; LIFELINE renders the human-facing
+briefing locally and seals it with the plan and verification hashes.
 
 The agent is intentionally not an operational tool. It has no incident-write,
-planning, approval, alert, or dispatch capability. It can explain a conflict,
-summarize what changed, and formulate questions for a human; it cannot decide.
-The room displays the narration only when its seal and input bindings hold, and
-the deterministic system remains fully usable when no API key or narration is
-available. A local coordinator can also request the same cited briefing for a
+planning, approval, alert, or dispatch capability. It cannot introduce prose
+into the briefing, choose a resource, or make a decision; it only selects
+sealed references for a locally rendered reading guide. The room displays that
+guide only when its seal and input bindings hold, and the deterministic system
+remains fully usable when no API key or briefing is available. A local
+coordinator can also request the same cited briefing for a
 current incident through the Operations console; that optional provider egress
 is authenticated and cannot alter the incident. See
 [`docs/AGENT_BRIEFING_MODE.md`](docs/AGENT_BRIEFING_MODE.md) for the contract,
 local setup, and verification boundary.
+
+| Step | OpenAI can do | LIFELINE still controls |
+| --- | --- | --- |
+| Before egress | Nothing | Verifies the plan, verification graph, and their seals locally. |
+| Provider call | Select opaque citation IDs from the closed packet. | Keeps raw report strings, credentials, write endpoints, and operational tools out of the request. |
+| Display | Nothing beyond its citation selection. | Renders every human-visible sentence from sealed values and fixed templates. |
+| Decision path | Nothing | Deterministic feasibility, human approval, audit ledger, and offline verification. |
 
 ## Run checks
 
@@ -190,7 +199,9 @@ For hackathon applications and judge questions, see the
 problem statement, product framing, demo claims, technical evidence, common
 answers, and the explicit boundary that the project uses synthetic data and
 has not been used in real incidents. The deeper architecture, verification,
-export, and adversarial-audit documents are linked there as well.
+export, and adversarial-audit documents are linked there as well. The
+[`Hackathon Runbook`](HACKATHON.MD) records the public judge URLs, submission
+references, and the exact local end-to-end walkthrough.
 
 ## Export a plan and run the incident room
 

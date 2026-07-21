@@ -592,8 +592,8 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
       && artifact.verification_sha256 === state.verificationSeal.sha256;
     const sealBound = state.agentSeal && state.seal && state.verificationSeal
       && state.agentSeal.canonicalize_version === 1
-      && state.agentSeal.agent_briefing_version === 4
-      && state.agentSeal.seal_version === 2
+      && state.agentSeal.agent_briefing_version === 5
+      && state.agentSeal.seal_version === 3
       && state.agentSeal.plan_sha256 === state.seal.sha256
       && state.agentSeal.verification_sha256 === state.verificationSeal.sha256;
     if (!artifact || !narration) {
@@ -605,7 +605,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
       content.appendChild(note);
       return;
     }
-    if (artifact.agent_briefing_version !== 4 || artifact.authority_boundary !== "INTERPRETIVE_ONLY" || !bound || !sealBound || state.agentIntegrity !== "pass") {
+    if (artifact.agent_briefing_version !== 5 || artifact.authority_boundary !== "INTERPRETIVE_ONLY" || !bound || !sealBound || state.agentIntegrity !== "pass") {
       const warning = document.createElement("p");
       warning.style.cssText = "margin:5px 0;color:var(--coral);font-weight:700";
       warning.textContent = w(
@@ -616,7 +616,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     }
     const status = document.createElement("p");
     status.style.cssText = "margin:5px 0 9px;color:#c39aff;font-size:.82rem;font-weight:700";
-    status.textContent = `${w("sealed optional narration", "narración opcional sellada")} · ${w("input binding verified in browser", "vínculo con insumos verificado en el navegador")} · ${artifact.model}`;
+    status.textContent = `${w("sealed controlled briefing", "briefing controlado sellado")} · ${w("input binding verified in browser", "vínculo con insumos verificado en el navegador")} · ${w("visible language rendered locally", "lenguaje visible generado localmente")} · ${artifact.model}`;
     content.appendChild(status);
     const citationLabel = citation => {
       if (typeof citation !== "string") return "";

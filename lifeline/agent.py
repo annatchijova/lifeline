@@ -21,8 +21,8 @@ from urllib.request import Request, urlopen
 from lifeline.export import CANONICALIZE_VERSION, CanonicalizationError, _atomic_write_text, seal_digest
 from lifeline.verification import VerificationError, verify_payload
 
-AGENT_BRIEFING_VERSION = 4
-AGENT_SEAL_VERSION = 2
+AGENT_BRIEFING_VERSION = 5
+AGENT_SEAL_VERSION = 3
 AUTHORITY_BOUNDARY = "INTERPRETIVE_ONLY"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
 
@@ -49,62 +49,29 @@ or source of operational facts.
 
 Use only the supplied packet. Do not invent, upgrade, reconcile, or omit
 evidence. Do not rank people, recommend a dispatch, choose a resource, issue
-instructions, or state that a human should approve or reject a proposal. Keep
-contradictions and unresolved evidence explicit. The headline, situation
-summary, every factual observation, and every question must cite one or more
-supplied citation IDs. Return only JSON matching the requested schema. The
-authority_boundary value must be exactly INTERPRETIVE_ONLY."""
+instructions, or state that a human should approve or reject a proposal.
+
+You do not return prose. Return only opaque citation IDs for a non-authoritative
+reading guide. LIFELINE renders every displayed sentence locally from sealed
+facts and fixed templates. Select citations only; never return a label,
+explanation, recommendation, or instruction. The authority_boundary value must
+be exactly INTERPRETIVE_ONLY."""
 
 
-NARRATION_SCHEMA = {
+GUIDE_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": [
-        "headline", "headline_citations", "situation_summary", "summary_citations",
-        "observations", "questions_for_human", "authority_boundary",
+        "focus_citations", "question_citations", "authority_boundary",
     ],
     "properties": {
-        "headline": {"type": "string", "minLength": 1, "maxLength": 280},
-        "headline_citations": {
-            "type": "array", "minItems": 1, "maxItems": 8,
+        "focus_citations": {
+            "type": "array", "minItems": 1, "maxItems": 12,
             "items": {"type": "string", "minLength": 1, "maxLength": 180},
         },
-        "situation_summary": {"type": "string", "minLength": 1, "maxLength": 2400},
-        "summary_citations": {
-            "type": "array", "minItems": 1, "maxItems": 8,
+        "question_citations": {
+            "type": "array", "maxItems": 10,
             "items": {"type": "string", "minLength": 1, "maxLength": 180},
-        },
-        "observations": {
-            "type": "array",
-            "maxItems": 12,
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["text", "citations"],
-                "properties": {
-                    "text": {"type": "string", "minLength": 1, "maxLength": 1200},
-                    "citations": {
-                        "type": "array", "minItems": 1, "maxItems": 8,
-                        "items": {"type": "string", "minLength": 1, "maxLength": 180},
-                    },
-                },
-            },
-        },
-        "questions_for_human": {
-            "type": "array",
-            "maxItems": 10,
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["question", "citations"],
-                "properties": {
-                    "question": {"type": "string", "minLength": 1, "maxLength": 700},
-                    "citations": {
-                        "type": "array", "minItems": 1, "maxItems": 8,
-                        "items": {"type": "string", "minLength": 1, "maxLength": 180},
-                    },
-                },
-            },
         },
         "authority_boundary": {"type": "string", "enum": [AUTHORITY_BOUNDARY]},
     },
@@ -525,55 +492,177 @@ def briefing_packet(
     }
 
 
-def _require_string(value: object, field: str, *, limit: int) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise AgentBriefingError(f"agent response has an invalid {field}")
-    return value
+def _citation_rows(packet: dict) -> tuple[list[dict], dict[str, dict]]:
+    rows = packet.get("citations")
+    if not isinstance(rows, list):
+        raise AgentBriefingError("sealed packet has no citation vocabulary")
+    ordered: list[dict] = []
+    by_id: dict[str, dict] = {}
+    for row in rows:
+        citation_id = row.get("id") if isinstance(row, dict) else None
+        if not isinstance(citation_id, str) or not citation_id or citation_id in by_id:
+            raise AgentBriefingError("sealed packet has an invalid citation vocabulary")
+        ordered.append(row)
+        by_id[citation_id] = row
+    if not ordered:
+        raise AgentBriefingError("sealed packet has an empty citation vocabulary")
+    return ordered, by_id
 
 
-def _validate_citations(value: object, field: str, known_citations: set[str]) -> list[str]:
-    if not isinstance(value, list) or not value or len(value) > 8 or any(not isinstance(ref, str) for ref in value):
+def _validate_citation_selection(
+    value: object,
+    field: str,
+    *,
+    ordered_ids: list[str],
+    known_citations: set[str],
+    minimum: int,
+    maximum: int,
+) -> list[str]:
+    if (
+        not isinstance(value, list)
+        or not minimum <= len(value) <= maximum
+        or any(not isinstance(ref, str) for ref in value)
+    ):
         raise AgentBriefingError(f"agent response has invalid citations in {field}")
-    if len(set(value)) != len(value) or any(ref not in known_citations for ref in value):
+    selected = set(value)
+    if len(selected) != len(value) or any(ref not in known_citations for ref in selected):
         raise AgentBriefingError(f"agent response cites evidence outside the sealed packet in {field}")
-    return value
+    # The model is not permitted to turn array position into a priority order.
+    return [citation_id for citation_id in ordered_ids if citation_id in selected]
 
 
-def _validate_cited_items(value: object, field: str, known_citations: set[str], text_key: str, *, limit: int) -> list[dict]:
-    if not isinstance(value, list) or len(value) > limit:
-        raise AgentBriefingError(f"agent response has an invalid {field}")
-    items: list[dict] = []
-    for index, item in enumerate(value):
-        if not isinstance(item, dict) or set(item) != {text_key, "citations"}:
-            raise AgentBriefingError(f"agent response has an invalid {field}[{index}]")
-        text = _require_string(item.get(text_key), f"{field}[{index}].{text_key}", limit=1200)
-        refs = _validate_citations(item.get("citations"), f"{field}[{index}]", known_citations)
-        items.append({text_key: text, "citations": refs})
-    return items
+def validate_briefing_guide(response: object, packet: dict) -> dict:
+    """Accept only opaque citation selections from the external provider.
 
-
-def validate_narration(response: object, packet: dict) -> dict:
-    """Reject output that is not a cited, explicitly non-authoritative brief."""
+    No provider-controlled prose crosses this boundary.  The model may select
+    already-sealed evidence for a reading guide, but the human-visible language
+    is generated locally by :func:`controlled_narration`.
+    """
     if not isinstance(response, dict) or set(response) != {
-        "headline", "headline_citations", "situation_summary", "summary_citations",
-        "observations", "questions_for_human", "authority_boundary",
+        "focus_citations", "question_citations", "authority_boundary",
     }:
-        raise AgentBriefingError("agent response does not match the narration contract")
+        raise AgentBriefingError("agent response does not match the reading-guide contract")
     if response.get("authority_boundary") != AUTHORITY_BOUNDARY:
         raise AgentBriefingError("agent response does not preserve the interpretive-only authority boundary")
-    citation_rows = packet.get("citations")
-    if not isinstance(citation_rows, list):
-        raise AgentBriefingError("sealed packet has no citation vocabulary")
-    known = {item.get("id") for item in citation_rows if isinstance(item, dict) and isinstance(item.get("id"), str)}
-    if not known:
-        raise AgentBriefingError("sealed packet has an empty citation vocabulary")
+    rows, by_id = _citation_rows(packet)
+    ordered_ids = [row["id"] for row in rows]
+    known = set(by_id)
     return {
-        "headline": _require_string(response.get("headline"), "headline", limit=280),
-        "headline_citations": _validate_citations(response.get("headline_citations"), "headline", known),
-        "situation_summary": _require_string(response.get("situation_summary"), "situation_summary", limit=2400),
-        "summary_citations": _validate_citations(response.get("summary_citations"), "situation_summary", known),
-        "observations": _validate_cited_items(response.get("observations"), "observations", known, "text", limit=12),
-        "questions_for_human": _validate_cited_items(response.get("questions_for_human"), "questions_for_human", known, "question", limit=10),
+        "focus_citations": _validate_citation_selection(
+            response.get("focus_citations"), "focus_citations", ordered_ids=ordered_ids,
+            known_citations=known, minimum=1, maximum=12),
+        "question_citations": _validate_citation_selection(
+            response.get("question_citations"), "question_citations", ordered_ids=ordered_ids,
+            known_citations=known, minimum=0, maximum=10),
+        "authority_boundary": AUTHORITY_BOUNDARY,
+    }
+
+
+def _briefing_citations(rows: list[dict], *, maximum: int = 8) -> list[str]:
+    preferred = [row["id"] for row in rows if row.get("kind") in {"proposal", "verification_node", "validation_finding"}]
+    return (preferred or [row["id"] for row in rows])[:maximum]
+
+
+def _controlled_observation(row: dict) -> str:
+    kind = row.get("kind")
+    if kind == "proposal":
+        number = row.get("proposal_number")
+        status = row.get("status")
+        metrics = row.get("metrics")
+        if not isinstance(number, int) or status not in {"PROPOSED", "NEEDS_HUMAN_REVIEW"} or not isinstance(metrics, dict):
+            raise AgentBriefingError("sealed packet has an invalid proposal citation")
+        metric_parts = [
+            f"{field}={metrics[field]}"
+            for field in ("people", "urgency", "eta_minutes")
+            if isinstance(metrics.get(field), int) and not isinstance(metrics.get(field), bool)
+        ]
+        suffix = f" Sealed metrics: {', '.join(metric_parts)}." if metric_parts else ""
+        return f"Sealed proposal {number} has status {status}.{suffix}"
+    if kind == "verification_node":
+        proposal = row.get("proposal_citation")
+        disposition = row.get("disposition")
+        reason = row.get("reason_code")
+        action = row.get("action_required")
+        if not all(isinstance(value, str) and value for value in (proposal, disposition, reason, action)):
+            raise AgentBriefingError("sealed packet has an invalid verification citation")
+        return (
+            f"Verification for {proposal} has disposition {disposition}; "
+            f"recorded reason {reason}; recorded human follow-up {action}."
+        )
+    if kind == "validation_finding":
+        code = row.get("code")
+        severity = row.get("severity")
+        entity_type = row.get("entity_type")
+        if not all(isinstance(value, str) and value for value in (code, severity, entity_type)):
+            raise AgentBriefingError("sealed packet has an invalid validation citation")
+        return f"Validation finding {code} has severity {severity} for a {entity_type} record."
+    if kind == "incident_event":
+        revision = row.get("revision")
+        event_type = row.get("event_type")
+        entity_type = row.get("entity_type")
+        if not isinstance(revision, int) or not all(isinstance(value, str) and value for value in (event_type, entity_type)):
+            raise AgentBriefingError("sealed packet has an invalid incident-event citation")
+        return f"Incident revision {revision} recorded {event_type} for a {entity_type} record."
+    raise AgentBriefingError("sealed packet has an unsupported citation kind")
+
+
+def _controlled_question(row: dict) -> str:
+    kind = row.get("kind")
+    if kind == "verification_node":
+        return "What does the cited Verification Graph leave unresolved for human review?"
+    if kind == "proposal":
+        return "After inspecting the cited sealed evidence, what decision, if any, should an authorized human record?"
+    if kind == "validation_finding":
+        return "Can a human corroborate or correct the cited validation finding?"
+    if kind == "incident_event":
+        return "Does the cited incident revision change what evidence a human should inspect?"
+    raise AgentBriefingError("sealed packet has an unsupported citation kind")
+
+
+def controlled_narration(packet: dict, guide: object) -> dict:
+    """Render all displayed agent language locally from sealed, typed values.
+
+    The provider supplies only a de-duplicated *set* of opaque citation IDs.
+    Its output cannot introduce a recommendation, instruction, person, route,
+    or resource identifier into this narration.
+    """
+    normalized_guide = validate_briefing_guide(guide, packet)
+    rows, by_id = _citation_rows(packet)
+    briefing = packet.get("briefing")
+    proposal_counts = briefing.get("proposal_counts") if isinstance(briefing, dict) else None
+    validation = briefing.get("validation") if isinstance(briefing, dict) else None
+    if not isinstance(proposal_counts, dict) or not isinstance(validation, dict):
+        raise AgentBriefingError("sealed packet has an invalid briefing summary")
+    proposed = proposal_counts.get("proposed")
+    needs_review = proposal_counts.get("needs_human_review")
+    total = proposal_counts.get("total")
+    warnings = validation.get("warn")
+    info = validation.get("info")
+    if any(not isinstance(value, int) or isinstance(value, bool) or value < 0 for value in (proposed, needs_review, total, warnings, info)):
+        raise AgentBriefingError("sealed packet has an invalid briefing summary")
+    summary_citations = _briefing_citations(rows)
+    observations = [
+        {"text": _controlled_observation(by_id[citation_id]), "citations": [citation_id]}
+        for citation_id in normalized_guide["focus_citations"]
+    ]
+    questions = [
+        {"question": _controlled_question(by_id[citation_id]), "citations": [citation_id]}
+        for citation_id in normalized_guide["question_citations"]
+    ]
+    return {
+        "headline": (
+            f"Sealed incident: {proposed} proposal(s) await a human decision; "
+            f"{needs_review} require evidence review."
+        ),
+        "headline_citations": summary_citations,
+        "situation_summary": (
+            f"The deterministic kernel evaluated {total} proposal(s), with "
+            f"{warnings} validation warning(s) and {info} informational finding(s). "
+            "This reading guide is not a priority order or an instruction."
+        ),
+        "summary_citations": summary_citations,
+        "observations": observations,
+        "questions_for_human": questions,
         "authority_boundary": AUTHORITY_BOUNDARY,
     }
 
@@ -590,15 +679,15 @@ def openai_request_body(packet: dict, model: str) -> dict:
             "role": "user",
             "content": [{
                 "type": "input_text",
-                "text": "Create an interpretive briefing from this sealed LIFELINE packet:\n" + json.dumps(
+                "text": "Select opaque citations for a controlled LIFELINE reading guide from this sealed packet:\n" + json.dumps(
                     packet, sort_keys=True, separators=(",", ":"), ensure_ascii=True),
             }],
         }],
         "text": {"format": {
             "type": "json_schema",
-            "name": "lifeline_agent_briefing",
+            "name": "lifeline_agent_reading_guide",
             "strict": True,
-            "schema": NARRATION_SCHEMA,
+            "schema": GUIDE_SCHEMA,
         }},
     }
 
@@ -620,14 +709,18 @@ def _response_output_text(response: object) -> str:
     raise AgentBriefingError("OpenAI response did not contain output text")
 
 
-def openai_narrate(
+def openai_select_reading_guide(
     packet: dict,
     *,
     model: str,
     api_key: str | None = None,
     request_sender: Callable[[Request], bytes] | None = None,
 ) -> dict:
-    """Call OpenAI only after all deterministic input checks have completed."""
+    """Call OpenAI only after all deterministic input checks have completed.
+
+    The response is deliberately limited to opaque citation IDs.  It never
+    supplies the human-visible text of a briefing.
+    """
     secret = api_key or os.environ.get("OPENAI_API_KEY")
     if not secret:
         raise AgentBriefingError("OPENAI_API_KEY is required for optional agent narration")
@@ -651,14 +744,15 @@ def openai_narrate(
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise AgentBriefingError("OpenAI narration response was unreadable") from error
     try:
-        narration = json.loads(_response_output_text(response))
+        guide = json.loads(_response_output_text(response))
     except json.JSONDecodeError as error:
-        raise AgentBriefingError("OpenAI narration was not valid JSON") from error
-    return validate_narration(narration, packet)
+        raise AgentBriefingError("OpenAI reading guide was not valid JSON") from error
+    return validate_briefing_guide(guide, packet)
 
 
-def agent_artifact(inputs: AgentInputs, packet: dict, narration: dict, *, model: str) -> dict:
-    """Bind a validated interpretation to the exact sealed inputs it read."""
+def agent_artifact(inputs: AgentInputs, packet: dict, guide: object, *, model: str) -> dict:
+    """Bind a controlled, locally rendered reading guide to sealed inputs."""
+    normalized_guide = validate_briefing_guide(guide, packet)
     return {
         "agent_briefing_version": AGENT_BRIEFING_VERSION,
         "authority_boundary": AUTHORITY_BOUNDARY,
@@ -668,11 +762,12 @@ def agent_artifact(inputs: AgentInputs, packet: dict, narration: dict, *, model:
         "verification_sha256": inputs.verification_sha256,
         "packet_sha256": seal_digest(packet),
         "incident_changes": packet.get("incident_changes", []),
-        "narration": narration,
+        "guide": normalized_guide,
+        "narration": controlled_narration(packet, normalized_guide),
         "limitations": [
             "This is an optional interpretation layer, not a planning or approval artifact.",
             "The agent received no mutation, approval, dispatch, or external-alert tool.",
-            "Only the cited sealed packet was supplied to the provider.",
+            "The provider selected opaque citations; all displayed prose was rendered locally from sealed values.",
         ],
     }
 
@@ -683,15 +778,15 @@ def verify_agent_artifact(
     *,
     incident_events: Iterable[object] = (),
 ) -> None:
-    """Check that a narration remains bound to the artifacts it was allowed to read.
+    """Check that a controlled briefing remains bound to sealed inputs.
 
-    This verifies integrity, input binding, the citation vocabulary, and the
-    non-authority contract. It intentionally cannot prove that an LLM's prose
-    was true or useful; those are not cryptographic properties.
+    This verifies integrity, input binding, the citation vocabulary, the
+    non-authority contract, and that every displayed sentence equals the local
+    controlled rendering for the sealed packet and guide.
     """
     if not isinstance(artifact, dict) or set(artifact) != {
         "agent_briefing_version", "authority_boundary", "provider", "model",
-        "plan_sha256", "verification_sha256", "packet_sha256", "incident_changes", "narration", "limitations",
+        "plan_sha256", "verification_sha256", "packet_sha256", "incident_changes", "guide", "narration", "limitations",
     }:
         raise AgentBriefingError("agent briefing does not match the artifact contract")
     if artifact.get("agent_briefing_version") != AGENT_BRIEFING_VERSION:
@@ -708,7 +803,9 @@ def verify_agent_artifact(
         raise AgentBriefingError("agent briefing event delta does not match the verified incident ledger")
     if artifact.get("packet_sha256") != seal_digest(packet):
         raise AgentBriefingError("agent briefing packet binding does not match the sealed inputs")
-    validate_narration(artifact.get("narration"), packet)
+    guide = validate_briefing_guide(artifact.get("guide"), packet)
+    if artifact.get("narration") != controlled_narration(packet, guide):
+        raise AgentBriefingError("agent briefing narration does not match the controlled local rendering")
     limitations = artifact.get("limitations")
     if not isinstance(limitations, list) or not all(isinstance(item, str) for item in limitations):
         raise AgentBriefingError("agent briefing has invalid limitations")
@@ -731,8 +828,8 @@ def narrate_export(out_dir: str | Path, *, model: str) -> tuple[dict, dict]:
     """Create and write an OpenAI narration from verified local artifacts."""
     inputs = load_verified_inputs(out_dir)
     packet = briefing_packet(inputs)
-    narration = openai_narrate(packet, model=model)
-    artifact = agent_artifact(inputs, packet, narration, model=model)
+    guide = openai_select_reading_guide(packet, model=model)
+    artifact = agent_artifact(inputs, packet, guide, model=model)
     return artifact, write_agent_artifact(out_dir, artifact)
 
 
@@ -750,8 +847,8 @@ def narrate_incident_plan(
     """
     inputs = verified_inputs_from_incident_plan(result)
     packet = briefing_packet(inputs, incident_events=incident_events)
-    narration = openai_narrate(packet, model=model)
-    artifact = agent_artifact(inputs, packet, narration, model=model)
+    guide = openai_select_reading_guide(packet, model=model)
+    artifact = agent_artifact(inputs, packet, guide, model=model)
     return artifact, agent_seal(artifact)
 
 
