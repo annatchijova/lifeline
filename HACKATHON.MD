@@ -58,6 +58,32 @@ a live hosted provider call and not an artifact bound to the static map's
 different plan hash. The capture makes the optional reading-guide behavior
 visible without placing a provider key or incident backend on Vercel.
 
+## Judge quick start and credentials
+
+No credential is required to inspect the hosted synthetic demo, architecture
+page, sealed artifacts, captured agent briefing, README, diagrams, or audit
+documentation. No shared credential is provided or needed.
+
+To run the complete local workflow, clone and install the repository:
+
+```bash
+git clone https://github.com/annatchijova/lifeline.git
+cd lifeline
+python3 -m pip install -e .
+python3 -m pytest -q
+```
+
+The local operator token is created on the judge's own machine by
+`lifeline operator init`; it is not committed, shared, or stored in plaintext.
+The deterministic plan, Verification Graph, simulation, approval, export, and
+offline verification paths work without any provider key.
+
+Agent Briefing Mode is optional. A judge who wishes to exercise the OpenAI
+citation-selection path may provide their own local `OPENAI_API_KEY` and follow
+the command sequence in [Optional OpenAI controlled reading guide](#optional-openai-controlled-reading-guide).
+The provider has no authority to mutate an incident, plan, approval, alert, or
+dispatch state.
+
 ## How to review the public demo
 
 1. Open the landing page and the architecture/evidence companion. Together,
