@@ -79,11 +79,13 @@ scenario data, applies declared constraints, exports a sealed plan, and records
 human approvals separately. Codex does not run inside that path and does not
 choose resources, priorities, routes, or actions.
 
-A future language model may be used only to narrate an already completed,
-human-approved plan under an explicit policy. It must never be allowed to
+An optional language model may narrate only a completed, locally verified plan
+and Verification Graph under an explicit policy. It must never be allowed to
 invent facts, upgrade evidence, alter a plan, or issue instructions as an
-operational authority. If it is unavailable, the deterministic plan and its
-audit trail must still exist.
+operational authority. Agent Briefing Mode receives no mutation or approval
+tools; it produces a separately sealed, cited interpretation bound to its
+inputs. If it is unavailable, the deterministic plan and its audit trail still
+exist. See [`AGENT_BRIEFING_MODE.md`](AGENT_BRIEFING_MODE.md).
 
 ## Evidence and limits of this note
 

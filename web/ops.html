@@ -12,7 +12,7 @@
 <section class="card wide"><h1 data-en="Local operations console" data-es="Consola local de operaciones">Local operations console</h1><p class="note" data-en="For the loopback LIFELINE server only. This page does not dispatch anything, retain a token after reload, or work on the public judge demo." data-es="Sólo para el servidor LIFELINE en loopback. Esta página no despacha nada, no retiene un token después de recargar y no funciona en la demo pública para jueces.">For the loopback LIFELINE server only. This page does not dispatch anything, retain a token after reload, or work on the public judge demo.</p><div id="connection" class="warning" data-en="Enter a local token to connect." data-es="Ingresá un token local para conectar.">Enter a local token to connect.</div><label for="token" data-en="Local operator token — kept only in this tab" data-es="Token local de operador — sólo se conserva en esta pestaña">Local operator token — kept only in this tab</label><input id="token" type="password" autocomplete="off" spellcheck="false"><div class="actions"><button id="connect" data-en="Connect" data-es="Conectar">Connect</button></div></section>
 <section class="card"><h2 data-en="Find an incident" data-es="Buscar incidente">Find an incident</h2><label for="query" data-en="Incident ID contains" data-es="El ID de incidente contiene">Incident ID contains</label><input id="query" placeholder="flood"><div class="actions"><button id="search" data-en="Search" data-es="Buscar">Search</button></div><div id="incidents" class="result"></div></section>
 <section class="card"><h2 data-en="Create a validated incident" data-es="Crear incidente validado">Create a validated incident</h2><p class="note" data-en="Load a complete schema-v1 scenario JSON. The server validates it before it becomes revision 1." data-es="Cargá un escenario JSON schema-v1 completo. El servidor lo valida antes de convertirlo en la revisión 1.">Load a complete schema-v1 scenario JSON. The server validates it before it becomes revision 1.</p><label for="scenario-file" data-en="Scenario JSON file" data-es="Archivo JSON del escenario">Scenario JSON file</label><input id="scenario-file" type="file" accept="application/json,.json"><div class="actions"><button id="create" data-en="Create incident" data-es="Crear incidente">Create incident</button></div><div id="create-result" class="result"></div></section>
-<section class="card"><h2 data-en="Selected incident" data-es="Incidente seleccionado">Selected incident</h2><div id="selected" class="result" data-en="No incident selected." data-es="No hay incidente seleccionado.">No incident selected.</div><div class="actions"><button id="plan" class="secondary" data-en="Compute sealed plan" data-es="Calcular plan sellado">Compute sealed plan</button></div><div id="plan-result" class="result"></div></section>
+<section class="card"><h2 data-en="Selected incident" data-es="Incidente seleccionado">Selected incident</h2><div id="selected" class="result" data-en="No incident selected." data-es="No hay incidente seleccionado.">No incident selected.</div><div class="actions"><button id="plan" class="secondary" data-en="Compute sealed plan" data-es="Calcular plan sellado">Compute sealed plan</button><button id="agent-briefing" data-en="Generate cited agent briefing" data-es="Generar briefing de agente con citas">Generate cited agent briefing</button></div><p class="note" data-en="Optional: sends only the verified sealed plan packet to OpenAI. It cannot modify the incident, plan, approval, or dispatch state." data-es="Opcional: envía sólo el paquete sellado y verificado del plan a OpenAI. No puede modificar el incidente, plan, aprobación ni estado de despacho.">Optional: sends only the verified sealed plan packet to OpenAI. It cannot modify the incident, plan, approval, or dispatch state.</p><div id="plan-result" class="result"></div><div id="agent-result" class="result"></div></section>
 <section class="card"><h2 data-en="Append or correct a report" data-es="Agregar o corregir un reporte">Append or correct a report</h2><p class="note" data-en="Append creates a revision. Correction replaces the operational snapshot but preserves the previous report in the ledger." data-es="Agregar crea una revisión. Corregir reemplaza el snapshot operativo pero preserva el reporte previo en el ledger.">Append creates a revision. Correction replaces the operational snapshot but preserves the previous report in the ledger.</p><label for="entity" data-en="Report type" data-es="Tipo de reporte">Report type</label><select id="entity"><option value="request">request</option><option value="resource">resource</option><option value="shelter">shelter</option><option value="route">route</option></select><label for="report" data-en="Typed report JSON" data-es="JSON del reporte tipado">Typed report JSON</label><p id="report-hint" class="note" style="margin:0 0 6px;font-size:.82rem"></p><textarea id="report" placeholder='{"request_id":"..."}'></textarea><div class="actions"><button id="fill-template" class="secondary" data-en="Fill template" data-es="Cargar plantilla">Fill template</button><button id="append" data-en="Append report" data-es="Agregar reporte">Append report</button><button id="correct" class="warn" data-en="Supersede with correction" data-es="Reemplazar con corrección">Supersede with correction</button></div><div id="report-result" class="result"></div></section>
 <section class="card wide"><h2 data-en="Attention feed" data-es="Feed de atención">Attention feed</h2><p class="note" data-en="Polls the selected incident every 15 seconds while this tab is open. Alerts describe changed facts or evidence limits; their authority is always none." data-es="Consulta el incidente seleccionado cada 15 segundos mientras la pestaña está abierta. Las alertas describen hechos cambiados o límites de evidencia; su autoridad siempre es ninguna.">Polls the selected incident every 15 seconds while this tab is open. Alerts describe changed facts or evidence limits; their authority is always none.</p><div id="alerts" class="result" data-en="Select an incident to load its attention feed." data-es="Seleccioná un incidente para cargar su feed de atención.">Select an incident to load its attention feed.</div></section>
 </main>
@@ -47,7 +47,9 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
 (() => {
   const root = document.documentElement;
   const planButton = document.getElementById("plan");
+  const agentButton = document.getElementById("agent-briefing");
   const planResult = document.getElementById("plan-result");
+  const agentResult = document.getElementById("agent-result");
   const selected = document.getElementById("selected");
   const token = document.getElementById("token");
   const word = (en, es) => root.dataset.language === "es" ? es : en;
@@ -64,6 +66,35 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`);
     return payload;
+  }
+
+  function canonicalTag(value) {
+    if (value === null) return ["null"];
+    if (typeof value === "boolean") return ["bool", value];
+    if (typeof value === "number") {
+      if (!Number.isSafeInteger(value)) throw new Error("sealed payload contains a non-integer number");
+      return ["int", String(value)];
+    }
+    if (typeof value === "string") return ["str", value];
+    if (Array.isArray(value)) return ["list", value.map(canonicalTag)];
+    if (typeof value === "object") return ["dict", Object.keys(value).sort().map(key => [key, canonicalTag(value[key])])];
+    throw new Error("unsupported sealed value");
+  }
+
+  function asciiJson(value) {
+    return JSON.stringify(value).replace(/[\u0080-\uffff]/g, char =>
+      `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+  }
+
+  async function verifyAgentSeal(artifact, seal) {
+    if (!seal || seal.canonicalize_version !== 1 || seal.agent_briefing_version !== 4 || seal.seal_version !== 2 || !window.crypto || !window.crypto.subtle) return "unavailable";
+    try {
+      const tagged = { canonicalize_version: 1, value: canonicalTag(artifact) };
+      const bytes = new TextEncoder().encode(asciiJson(tagged));
+      const digest = await window.crypto.subtle.digest("SHA-256", bytes);
+      const actual = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, "0")).join("");
+      return actual === seal.sha256 ? "pass" : "fail";
+    } catch { return "fail"; }
   }
 
   function proposalCard(proposal) {
@@ -114,6 +145,7 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
       return;
     }
     try {
+      agentResult.textContent = "";
       current = await request(`/api/incidents/${encodeURIComponent(id)}/plan`, { reference_time: new Date().toISOString() });
       planResult.innerHTML = "";
       const summary = document.createElement("div");
@@ -125,6 +157,96 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     }
   }
 
+  async function renderAgentBriefing(result) {
+    agentResult.innerHTML = "";
+    const artifact = result && result.agent_briefing;
+    const seal = result && result.agent_briefing_seal;
+    const narration = artifact && artifact.narration;
+    const integrity = await verifyAgentSeal(artifact, seal);
+    const bound = artifact && current && artifact.plan_sha256 === current.seal.sha256
+      && artifact.verification_sha256 === current.verification_seal.sha256
+      && seal && seal.plan_sha256 === current.seal.sha256 && seal.verification_sha256 === current.verification_seal.sha256;
+    if (!artifact || !narration || artifact.agent_briefing_version !== 4 || artifact.authority_boundary !== "INTERPRETIVE_ONLY" || integrity !== "pass" || !bound) {
+      agentResult.textContent = word("Agent briefing failed its local integrity or authority checks.", "El briefing de agente no pasó sus controles locales de integridad o autoridad.");
+      return;
+    }
+    const status = document.createElement("div");
+    status.className = "ok";
+    const delta = Number.isInteger(result.after_revision) ? `${word("changes since revision", "cambios desde la revisión")} ${result.after_revision}` : word("current sealed state", "estado sellado actual");
+    status.textContent = `${word("Cited optional narration", "Narración opcional con citas")} · ${artifact.model} · ${delta} · ${word("seal and input binding verified in browser", "sello y vínculo con insumos verificados en el navegador")} · ${word("no operational authority", "sin autoridad operativa")}`;
+    agentResult.append(status);
+    const citationLabel = citation => {
+      if (typeof citation !== "string") return "";
+      if (citation.startsWith("proposal:")) {
+        const index = Number(citation.slice("proposal:".length));
+        const proposal = ((current && current.plan && current.plan.proposals) || [])[index];
+        return proposal ? `${citation} — ${proposal.request_id}; ${proposal.status}; ${(proposal.reasons || []).join(", ")}` : citation;
+      }
+      if (citation.startsWith("verification:")) {
+        const index = Number(citation.slice("verification:".length));
+        const node = current && current.verification && current.verification.nodes && current.verification.nodes[index];
+        return node ? `${citation} — ${node.request_id}; ${node.reason_code}; ${node.action_required}` : citation;
+      }
+      if (citation.startsWith("finding:")) {
+        const index = Number(citation.slice("finding:".length));
+        const finding = current && current.plan && current.plan.validation_findings && current.plan.validation_findings[index];
+        return finding ? `${citation} — ${finding.entity_type}:${finding.entity_id}; ${finding.code}; ${finding.detail}` : citation;
+      }
+      if (citation.startsWith("event:")) {
+        const change = (artifact.incident_changes || []).find(item => item.citation_id === citation);
+        if (!change) return citation;
+        const changed = (change.changes || []).map(item => `${item.field}: ${item.before} → ${item.after}`).join(", ");
+        return `${citation} — r${change.revision} ${change.event_type} ${change.entity_type}${changed ? `; ${changed}` : ""}`;
+      }
+      return citation;
+    };
+    const citedEvidence = citations => {
+      const line = document.createElement("small");
+      line.style.cssText = "display:block;margin-top:3px;color:#8e50e6";
+      line.textContent = Array.isArray(citations)
+        ? `${word("evidence", "evidencia")}: ${citations.map(citationLabel).join(" · ")}` : "";
+      return line;
+    };
+    const headline = document.createElement("h3");
+    headline.textContent = narration.headline || word("Untitled briefing", "Briefing sin título");
+    agentResult.append(headline, citedEvidence(narration.headline_citations));
+    const summary = document.createElement("p");
+    summary.textContent = narration.situation_summary || "";
+    agentResult.append(summary, citedEvidence(narration.summary_citations));
+    [[word("Observations", "Observaciones"), narration.observations, "text"], [word("Questions for a human", "Preguntas para una persona"), narration.questions_for_human, "question"]].forEach(([label, items, field]) => {
+      if (!Array.isArray(items) || !items.length) return;
+      const title = document.createElement("b"); title.textContent = label; agentResult.append(title);
+      items.forEach(item => {
+        const line = document.createElement("p");
+        line.textContent = item[field];
+        const citations = citedEvidence(item.citations);
+        agentResult.append(line);
+        agentResult.append(citations);
+      });
+    });
+  }
+
+  async function generateAgentBriefing() {
+    if (!current) {
+      agentResult.textContent = word("Compute a sealed plan first.", "Calculá primero un plan sellado.");
+      return;
+    }
+    agentButton.disabled = true;
+    agentResult.textContent = word("Generating cited interpretation from sealed inputs…", "Generando interpretación con citas desde insumos sellados…");
+    try {
+      const result = await request(`/api/incidents/${encodeURIComponent(current.incident_id)}/agent-briefing`, {
+        reference_time: current.plan.reference_time,
+        after_revision: Math.max(0, current.revision - 1),
+      });
+      await renderAgentBriefing(result);
+    } catch (error) {
+      agentResult.textContent = error.message;
+    } finally {
+      agentButton.disabled = false;
+    }
+  }
+
   planButton.onclick = renderPlan;
+  agentButton.onclick = generateAgentBriefing;
 })();
 </script></body></html>

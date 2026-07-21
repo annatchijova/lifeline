@@ -12,6 +12,9 @@ Endpoints:
   GET    /api/incidents/{id}/events?after_revision=N -> append-only event feed
   GET    /api/incidents/{id}/alerts?after_revision=N -> deterministic attention feed
   POST   /api/incidents/{id}/plan -> seal a plan from the stored revision
+  POST   /api/incidents/{id}/agent-briefing -> optional, cited OpenAI narration
+                           over the current sealed incident plan; coordinator
+                           authenticated because this is external data egress
   GET/POST /api/incidents/{id}/approvals -> verified per-incident decision ledger
   GET  /api/approvals   -> {"entries": [...], "chain_ok": bool, "chain_error": str|null}
   POST /api/approvals   -> record one decision for a PROPOSED item of the
@@ -36,14 +39,15 @@ from urllib.parse import parse_qs, unquote, urlparse
 from lifeline.approvals import ACTIONS, ApprovalChainError, append_entry, read_entries, verify_chain
 from lifeline.alerts import alerts_from_events
 from lifeline.auth import AuthError, Operator, OperatorStore
-from lifeline.export import seal_digest
+from lifeline.export import CanonicalizationError, seal_digest
 from lifeline.incidents import IncidentConflict, IncidentNotFound, IncidentStore, IncidentStoreError
 
 MAX_BODY_BYTES = 8192
 MAX_FIELD_LENGTH = 200
+REQUEST_TIMEOUT_SECONDS = 5.0
 PUBLIC_ARTIFACTS = frozenset({
     "plan.json", "plan.seal.json", "verification.json", "verification.seal.json", "room.geojson",
-    "simulation.json", "simulation.seal.json",
+    "simulation.json", "simulation.seal.json", "agent_briefing.json", "agent_briefing.seal.json",
 })
 
 
@@ -59,9 +63,21 @@ def _load_current_plan(out_dir: Path) -> tuple[dict, str]:
     seal_path = out_dir / "plan.seal.json"
     if not plan_path.exists() or not seal_path.exists():
         raise ApiError(404, "no exported plan found; run: python3 -m lifeline plan <scenario> --out out")
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    seal = json.loads(seal_path.read_text(encoding="utf-8"))
-    recomputed = seal_digest(plan)
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        seal = json.loads(seal_path.read_text(encoding="utf-8"))
+        if not isinstance(plan, dict) or not isinstance(seal, dict):
+            raise ValueError("plan and seal must be JSON objects")
+        proposals = plan.get("proposals")
+        if not isinstance(proposals, list) or any(
+            not isinstance(proposal, dict)
+            or any(not isinstance(proposal.get(field), str) for field in ("request_id", "status", "audit_hash"))
+            for proposal in proposals
+        ):
+            raise ValueError("plan proposals have an invalid shape")
+        recomputed = seal_digest(plan)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, CanonicalizationError, ValueError) as error:
+        raise ApiError(500, "exported plan artifacts are unreadable; refusing to record approvals") from error
     if recomputed != seal.get("sha256"):
         raise ApiError(500, "plan.json does not match plan.seal.json; refusing to record approvals")
     return plan, recomputed
@@ -71,6 +87,10 @@ class RoomHandler(SimpleHTTPRequestHandler):
     def __init__(self, request, client_address, server, **kwargs):
         super().__init__(request, client_address, server, directory=str(server.root_dir), **kwargs)
 
+    def setup(self):
+        self.request.settimeout(self.server.request_timeout_seconds)
+        super().setup()
+
     def log_message(self, format, *args):  # quieter default
         pass
 
@@ -78,13 +98,18 @@ class RoomHandler(SimpleHTTPRequestHandler):
         return posixpath.normpath(urlparse(self.path).path)
 
     def _json_body(self) -> dict:
-        length = int(self.headers.get("Content-Length") or 0)
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            raise ApiError(400, "Content-Length must be an integer")
         if length <= 0:
             raise ApiError(400, "empty body")
         if length > MAX_BODY_BYTES:
             raise ApiError(413, "body too large")
         try:
             value = json.loads(self.rfile.read(length).decode("utf-8"))
+        except TimeoutError:
+            raise ApiError(408, "request body timed out")
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise ApiError(400, "body must be valid JSON")
         if not isinstance(value, dict):
@@ -109,15 +134,16 @@ class RoomHandler(SimpleHTTPRequestHandler):
 
         Artifact names are an allowlist, but a name alone is not a filesystem
         boundary: a writable out directory could replace a permitted name with
-        a symlink.  On POSIX, O_NOFOLLOW closes the check/open race as well.
+        a symlink or FIFO. On POSIX, O_NOFOLLOW closes the check/open race and
+        O_NONBLOCK prevents a FIFO from blocking before fstat rejects it.
         """
         path = self.server.out_dir / artifact
         if path.is_symlink():
             return None
-        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
         try:
             descriptor = os.open(path, flags)
-        except OSError:
+        except (OSError, ValueError):
             return None
         info = os.fstat(descriptor)
         if not stat.S_ISREG(info.st_mode):
@@ -125,19 +151,56 @@ class RoomHandler(SimpleHTTPRequestHandler):
             return None
         return descriptor, info
 
-    def _serve_public_artifact(self, artifact: str, *, head_only: bool) -> None:
-        opened = self._open_public_artifact(artifact)
+    def _open_web_file(self, clean: str) -> tuple[int, os.stat_result] | None:
+        """Open a static web file without following a symlink at any depth."""
+        relative = unquote(clean[len("/web/"):])
+        parts = tuple(relative.split("/"))
+        if not parts or any(part in {"", ".", ".."} for part in parts):
+            return None
+        directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+        file_flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        directory_fd: int | None = None
+        try:
+            directory_fd = os.open(self.server.root_dir / "web", directory_flags)
+            for part in parts[:-1]:
+                child_fd = os.open(part, directory_flags, dir_fd=directory_fd)
+                os.close(directory_fd)
+                directory_fd = child_fd
+            descriptor = os.open(parts[-1], file_flags, dir_fd=directory_fd)
+        except (OSError, ValueError):
+            return None
+        finally:
+            if directory_fd is not None:
+                os.close(directory_fd)
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            os.close(descriptor)
+            return None
+        return descriptor, info
+
+    def _serve_open_file(
+        self, opened: tuple[int, os.stat_result] | None, display_path: Path, *, head_only: bool,
+    ) -> None:
         if opened is None:
-            self.send_error(404, "artifact is not publicly served")
+            self.send_error(404, "file is not publicly served")
             return
         descriptor, info = opened
         with os.fdopen(descriptor, "rb") as source:
             self.send_response(200)
-            self.send_header("Content-Type", self.guess_type(str(self.server.out_dir / artifact)))
+            self.send_header("Content-Type", self.guess_type(str(display_path)))
             self.send_header("Content-Length", str(info.st_size))
             self.end_headers()
             if not head_only:
                 self.copyfile(source, self.wfile)
+
+    def _serve_public_artifact(self, artifact: str, *, head_only: bool) -> None:
+        self._serve_open_file(
+            self._open_public_artifact(artifact), self.server.out_dir / artifact, head_only=head_only)
+
+    def _serve_web_file(self, clean: str, *, head_only: bool) -> None:
+        relative = unquote(clean[len("/web/"):])
+        self._serve_open_file(
+            self._open_web_file(clean), self.server.root_dir / "web" / relative, head_only=head_only)
 
     def _send_json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload, sort_keys=True).encode("utf-8")
@@ -202,8 +265,8 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             self._serve_public_artifact(artifact, head_only=False)
             return
-        if clean == "/web" or clean.startswith("/web/"):
-            super().do_GET()
+        if clean.startswith("/web/"):
+            self._serve_web_file(clean, head_only=False)
             return
         self.send_error(404, "only /web/, selected /out/ artifacts, and /api/ are served")
 
@@ -216,8 +279,8 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             self._serve_public_artifact(artifact, head_only=True)
             return
-        if clean == "/web" or clean.startswith("/web/"):
-            super().do_HEAD()
+        if clean.startswith("/web/"):
+            self._serve_web_file(clean, head_only=True)
             return
         self.send_error(404, "only /web/ and selected /out/ artifacts are served")
 
@@ -357,9 +420,9 @@ class RoomHandler(SimpleHTTPRequestHandler):
     def _post_incident(self, clean: str) -> None:
         try:
             incident_id, action = self._incident_path(clean)
-            body = self._json_body()
             if action == "reports":
                 self._operator("reporter")
+                body = self._json_body()
                 entity_type = body.get("entity_type")
                 report = body.get("report")
                 if not isinstance(entity_type, str):
@@ -369,6 +432,7 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             if action == "corrections":
                 self._operator("coordinator")
+                body = self._json_body()
                 entity_type = body.get("entity_type")
                 report = body.get("report")
                 if not isinstance(entity_type, str):
@@ -378,13 +442,48 @@ class RoomHandler(SimpleHTTPRequestHandler):
                 return
             if action == "plan":
                 self._operator("reader")
+                body = self._json_body()
                 reference_time = body.get("reference_time")
                 if reference_time is not None and not isinstance(reference_time, str):
                     raise ApiError(400, "reference_time must be a string or null")
                 self._send_json(200, self.server.incidents.plan(incident_id, reference_time))
                 return
+            if action == "agent-briefing":
+                # A narration has no operational authority, but it does send a
+                # sealed packet to an external provider. Keep that egress behind
+                # the local coordinator role, never behind a browser-only demo.
+                self._operator("coordinator")
+                body = self._json_body()
+                reference_time = body.get("reference_time")
+                if reference_time is not None and not isinstance(reference_time, str):
+                    raise ApiError(400, "reference_time must be a string or null")
+                after_revision = body.get("after_revision")
+                if after_revision is not None and (isinstance(after_revision, bool) or not isinstance(after_revision, int) or after_revision < 0):
+                    raise ApiError(400, "after_revision must be a non-negative integer or null")
+                try:
+                    from lifeline.agent import AgentBriefingError, narrate_incident_plan
+                    current_plan = self.server.incidents.plan(incident_id, reference_time)
+                    if after_revision is None:
+                        after_revision = max(0, current_plan["revision"] - 1)
+                    if after_revision > current_plan["revision"]:
+                        raise ApiError(400, "after_revision cannot exceed the current incident revision")
+                    artifact, seal = narrate_incident_plan(
+                        current_plan,
+                        model=self.server.agent_model,
+                        incident_events=self.server.incidents.events(incident_id, after_revision),
+                    )
+                except AgentBriefingError as error:
+                    raise ApiError(503, f"agent narration unavailable: {error}") from error
+                self._send_json(200, {
+                    "incident_id": incident_id,
+                    "after_revision": after_revision,
+                    "agent_briefing": artifact,
+                    "agent_briefing_seal": seal,
+                })
+                return
             if action == "approvals":
                 operator = self._operator("coordinator")
+                body = self._json_body()
                 for field in ("request_id", "action", "proposal_audit_hash", "plan_sha256"):
                     if not isinstance(body.get(field), str) or not body[field].strip():
                         raise ApiError(400, f"field '{field}' must be a non-empty string")
@@ -415,6 +514,8 @@ def make_server(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.
     server.out_dir = Path(out_dir).resolve()
     server.approvals_path = server.out_dir / "approvals.jsonl"
     server.approvals_lock = threading.Lock()
+    server.request_timeout_seconds = REQUEST_TIMEOUT_SECONDS
+    server.agent_model = os.environ.get("LIFELINE_AGENT_MODEL", "gpt-5")
     server.incidents = IncidentStore(server.out_dir / "incidents.sqlite3")
     server.operators = OperatorStore(server.out_dir / "operators.sqlite3")
     return server
@@ -424,7 +525,7 @@ def serve(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.1", po
     server = make_server(root_dir, out_dir, host, port)
     print(f"incident room: http://{host}:{port}/web/room.html")
     print(f"approvals log: {server.approvals_path} (append-only, hash-chained)")
-    print("local use only: no authentication; approver identity is declared, not verified")
+    print("local use only: bearer-token authentication is required; approver identity comes from the authenticated operator")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

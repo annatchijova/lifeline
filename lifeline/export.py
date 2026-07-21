@@ -9,6 +9,8 @@ is deliberately outside the seal.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -27,6 +29,30 @@ VERIFICATION_SEAL_VERSION = 1
 
 class CanonicalizationError(ValueError):
     """A value that must never enter a sealed payload was encountered."""
+
+
+def _atomic_write_text(path: Path, content: str) -> None:
+    """Publish one artifact whole-or-not-at-all within its output directory.
+
+    A re-export cannot make an existing public artifact temporarily contain a
+    prefix of its replacement.  A crash between sibling publications can still
+    leave different generations side by side; their seals deliberately detect
+    that state and approval remains fail-closed.
+    """
+    temporary_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=path.parent,
+            prefix=f".{path.name}.", suffix=".tmp", delete=False,
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            temporary.write(content)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        temporary_path.replace(path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
 
 
 def _tag(value):
@@ -207,8 +233,8 @@ def export_plan(scenario_path: str | Path, out_dir: str | Path, reference_time: 
     verification = verification_payload(scenario, proposals, findings, plan_sha256=digest)
     verification_digest = seal_digest(verification)
 
-    (out / "plan.json").write_text(
-        json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    _atomic_write_text(
+        out / "plan.json", json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=True) + "\n")
     seal = {
         "sha256": digest,
         "canonicalize_version": CANONICALIZE_VERSION,
@@ -216,20 +242,20 @@ def export_plan(scenario_path: str | Path, out_dir: str | Path, reference_time: 
         "scenario_sha256": sha256(scenario_path.read_bytes()).hexdigest(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    (out / "plan.seal.json").write_text(
-        json.dumps(seal, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-    (out / "verification.json").write_text(
-        json.dumps(verification, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-    (out / "verification.seal.json").write_text(
-        json.dumps({
+    _atomic_write_text(
+        out / "plan.seal.json", json.dumps(seal, sort_keys=True, indent=2, ensure_ascii=True) + "\n")
+    _atomic_write_text(
+        out / "verification.json", json.dumps(verification, sort_keys=True, indent=2, ensure_ascii=True) + "\n")
+    _atomic_write_text(
+        out / "verification.seal.json", json.dumps({
             "sha256": verification_digest,
             "canonicalize_version": CANONICALIZE_VERSION,
             "verification_version": verification["verification_version"],
             "plan_sha256": digest,
             "seal_version": VERIFICATION_SEAL_VERSION,
-        }, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-    (out / "room.geojson").write_text(
-        json.dumps(room_geojson(scenario, proposals, findings), indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+        }, sort_keys=True, indent=2, ensure_ascii=True) + "\n")
+    _atomic_write_text(
+        out / "room.geojson", json.dumps(room_geojson(scenario, proposals, findings), indent=2, ensure_ascii=True) + "\n")
     return ExportResult(seal, scenario, proposals, findings)
 
 
@@ -252,8 +278,8 @@ def export_simulation(
     payload = simulate_payload(scenario, simulation_id, variants, reference_time)
     digest = seal_digest(payload)
 
-    (out / "simulation.json").write_text(
-        json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    _atomic_write_text(
+        out / "simulation.json", json.dumps(payload, sort_keys=True, indent=2, ensure_ascii=True) + "\n")
     seal = {
         "sha256": digest,
         "canonicalize_version": CANONICALIZE_VERSION,
@@ -262,6 +288,6 @@ def export_simulation(
         "whatifs_sha256": sha256(whatifs_path.read_bytes()).hexdigest(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    (out / "simulation.seal.json").write_text(
-        json.dumps(seal, sort_keys=True, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    _atomic_write_text(
+        out / "simulation.seal.json", json.dumps(seal, sort_keys=True, indent=2, ensure_ascii=True) + "\n")
     return seal

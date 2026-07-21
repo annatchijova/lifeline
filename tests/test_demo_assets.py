@@ -43,3 +43,16 @@ def test_room_defaults_to_demo_and_live_mode_has_a_demo_fallback():
     room_html = (REPO / "web" / "room.html").read_text(encoding="utf-8")
     assert 'get("mode") !== "live"' in room_html
     assert 'window.location.replace("room.html?mode=demo&missing=live")' in room_html
+    assert 'VERIFICATION GRAPH — EVIDENCE BEFORE NARRATIVE' in room_html
+    assert 'CONTRADICTORY OBSERVATIONS REMAIN VISIBLE' in room_html
+    assert "DEMO RUN OF SHOW — THE KERNEL'S COMPLETE PATH" in room_html
+    assert "AGENT BRIEFING MODE — OPTIONAL, INTERPRETIVE ONLY" in room_html
+    assert "agent_briefing.json" in room_html
+    assert "citationLabel" in room_html
+    assert "incident_changes" in room_html
+    assert "headline_citations" in room_html
+    assert "summary_citations" in room_html
+    assert "agent_briefing_version !== 4" in room_html
+    assert "sealBound" in room_html
+    assert "state.agentSeal.seal_version === 2" in room_html
+    assert 'verification.seal.json' in room_html

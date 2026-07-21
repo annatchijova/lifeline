@@ -100,6 +100,20 @@ def test_future_or_unparseable_operational_timestamps_are_downgraded_not_used():
     assert plan["family-north"].status == "NEEDS_HUMAN_REVIEW"
 
 
+def test_subsecond_future_request_is_downgraded_before_planning():
+    raw = _raw()
+    raw["requests"][0]["observed_at"] = "2026-07-17T11:00:00.500000+00:00"
+
+    scenario, findings = validate_scenario(
+        parse_scenario(raw), reference_time="2026-07-17T11:00:00+00:00")
+    request = next(item for item in scenario.requests if item.request.request_id == "family-north")
+    proposal = next(item for item in plan_scenario(scenario) if item.request_id == "family-north")
+
+    assert request.provenance.freshness == "low"
+    assert "FUTURE_TIMESTAMP" in _codes(findings)
+    assert proposal.status == "NEEDS_HUMAN_REVIEW"
+
+
 def test_findings_are_deterministically_ordered():
     a = validate_scenario(load_scenario(SCENARIO_PATH), reference_time="2026-07-17T13:30:00Z")[1]
     b = validate_scenario(load_scenario(SCENARIO_PATH), reference_time="2026-07-17T13:30:00Z")[1]

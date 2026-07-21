@@ -65,6 +65,25 @@ def test_sealed_plan_contains_no_floats(tmp_path):
     walk(plan)
 
 
+def test_export_keeps_the_previous_plan_when_atomic_publish_fails(tmp_path, monkeypatch):
+    export_plan(SCENARIO_PATH, tmp_path)
+    before = (tmp_path / "plan.json").read_bytes()
+
+    def fail_plan_publish(source, target):
+        if Path(target).name == "plan.json":
+            raise OSError("synthetic publish interruption")
+        return original_replace(source, target)
+
+    original_replace = Path.replace
+    monkeypatch.setattr(Path, "replace", fail_plan_publish)
+
+    with pytest.raises(OSError, match="synthetic publish interruption"):
+        export_plan(SCENARIO_PATH, tmp_path, reference_time="2026-07-17T11:00:00Z")
+
+    assert (tmp_path / "plan.json").read_bytes() == before
+    assert not list(tmp_path.glob(".plan.json.*.tmp"))
+
+
 def test_verify_rejects_a_resigned_verification_artifact_with_unknown_authority(tmp_path):
     export_plan(SCENARIO_PATH, tmp_path)
     verification_path = tmp_path / "verification.json"
@@ -85,6 +104,20 @@ def test_verify_rejects_a_resigned_verification_artifact_with_unknown_authority(
     assert result.returncode == 1
     assert "verification seal: PASS" in result.stdout
     assert "verification semantics: FAIL (blocked node for family-south has an unknown verification action)" in result.stdout
+
+
+def test_verify_reports_a_truncated_artifact_as_fail_not_a_traceback(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    (tmp_path / "plan.json").write_text('{"partial":', encoding="utf-8")
+
+    result = subprocess.run(
+        [sys.executable, "-m", "lifeline", "verify", "--out", str(tmp_path)],
+        cwd=REPO, capture_output=True, text=True,
+    )
+
+    assert result.returncode == 1
+    assert "plan seal: FAIL (plan.json or plan.seal.json is unreadable)" in result.stdout
+    assert "Traceback" not in result.stderr
 
 
 def test_sealed_plan_contains_a_complete_non_authoritative_briefing(tmp_path):

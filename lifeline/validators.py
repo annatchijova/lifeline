@@ -50,7 +50,12 @@ def _age_minutes(observed_at: str, reference: datetime) -> int | None:
     observed = _parse_observed(observed_at)
     if observed is None or observed.tzinfo is None or reference.tzinfo is None:
         return None
-    return int((reference - observed).total_seconds()) // 60
+    seconds = (reference - observed).total_seconds()
+    # Test futureness before reducing precision. int(-0.5) is 0, which would
+    # otherwise let a sub-second future report pass as present evidence.
+    if seconds < 0:
+        return -1
+    return int(seconds) // 60
 
 
 def _downgrade_state(provenance: Provenance, state: str) -> Provenance:
@@ -133,7 +138,7 @@ def _check_staleness(scenario: Scenario, reference_time: str | None, findings: l
         if age < 0:
             findings.append(Finding(
                 "FUTURE_TIMESTAMP", "warn", entity_type, entity_id,
-                f"observed_at is {-age} minutes after the reference time; downgraded to 'low' freshness",
+                "observed_at is after the reference time; downgraded to 'low' freshness",
             ))
             return replace(provenance, freshness="low")
         computed = _stale_level(age)
