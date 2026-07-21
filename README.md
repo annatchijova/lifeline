@@ -160,8 +160,11 @@ planning, approval, alert, or dispatch capability. It can explain a conflict,
 summarize what changed, and formulate questions for a human; it cannot decide.
 The room displays the narration only when its seal and input bindings hold, and
 the deterministic system remains fully usable when no API key or narration is
-available. See [`docs/AGENT_BRIEFING_MODE.md`](docs/AGENT_BRIEFING_MODE.md) for
-the contract, local setup, and verification boundary.
+available. A local coordinator can also request the same cited briefing for a
+current incident through the Operations console; that optional provider egress
+is authenticated and cannot alter the incident. See
+[`docs/AGENT_BRIEFING_MODE.md`](docs/AGENT_BRIEFING_MODE.md) for the contract,
+local setup, and verification boundary.
 
 ## Run checks
 

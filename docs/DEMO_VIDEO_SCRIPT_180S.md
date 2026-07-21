@@ -1,4 +1,4 @@
-# LIFELINE — 180-Second Judge Demo
+# LIFELINE — 3–4 Minute Judge Demo
 
 **Format:** edited YouTube video
 
@@ -40,6 +40,11 @@ python3 -m lifeline verify --out /tmp/lifeline-video-out
 
 Bootstrap a local admin before recording the operations segment. Keep the
 token outside the recording until the approval shot.
+
+For the optional OpenAI segment, set `OPENAI_API_KEY` only in the terminal
+running the local server. Never paste it into a browser, the repository, or the
+recording. If the key is unavailable, omit only the Agent Briefing shot; the
+deterministic incident path remains complete.
 
 ## Timeline and spoken script
 
@@ -178,7 +183,25 @@ Perform three rapid actions:
 
 Show the recorded entry index and the rejection messages.
 
-### 2:28–2:42 — Trace and export
+### 2:28–2:43 — Optional OpenAI Agent Briefing
+
+**Screen:** the local `ops.html` plan card.
+
+Click **Generate cited agent briefing**. Keep the coordinator token out of
+frame. Show the returned headline, one observation, one question for a human,
+and its citation IDs.
+
+**Voiceover:**
+
+> The deterministic kernel decides what evidence is admissible. The optional
+> OpenAI agent receives only that sealed evidence packet. It explains what is
+> happening with citations, but it has no tools to alter a report, plan,
+> approval, alert, or dispatch.
+
+This is the OpenAI moment. Do not present the agent as an emergency authority
+or show it giving a recommendation.
+
+### 2:43–2:58 — Trace and export
 
 **Screen:** terminal, then output directory.
 
@@ -201,7 +224,7 @@ trace.sqlite
 > The run also produces a trace of what the kernel did and a portable bundle:
 > plan, evidence graph, map layer, simulations, and independent seals.
 
-### 2:42–3:00 — Verify, tamper, close
+### 2:58–3:18 — Verify, tamper, close
 
 **Screen:** terminal.
 
@@ -240,7 +263,7 @@ Close on the room and say:
 - Keep the synthetic-data ribbon visible at least once.
 - Never show a real token, real location, or real emergency data.
 - Put the current stage in a small corner caption: `INGEST`, `CORROBORATE`,
-  `PLAN`, `SIMULATE`, `REVISE`, `APPROVE`, `VERIFY`.
+  `PLAN`, `SIMULATE`, `REVISE`, `APPROVE`, `NARRATE`, `VERIFY`.
 - If the full 180 seconds feels dense, remove the second simulation variant,
   not the revision or verification shots. Those two prove the system is more
   than a static planner.

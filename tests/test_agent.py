@@ -14,11 +14,14 @@ from lifeline.agent import (
     narrate_export,
     openai_narrate,
     openai_request_body,
+    narrate_incident_plan,
     validate_narration,
     verify_agent_artifact,
+    verified_inputs_from_incident_plan,
     write_agent_artifact,
 )
 from lifeline.export import export_plan, seal_digest
+from lifeline.incidents import IncidentStore
 
 REPO = Path(__file__).resolve().parent.parent
 SCENARIO_PATH = REPO / "scenarios" / "flood_v1.json"
@@ -157,3 +160,21 @@ def test_narrate_cli_refuses_without_a_key(tmp_path):
     assert result.returncode == 2
     assert "agent narration refused: OPENAI_API_KEY is required" in result.stderr
     assert not (tmp_path / "agent_briefing.json").exists()
+
+
+def test_incident_plan_uses_the_same_verified_agent_input_boundary(tmp_path, monkeypatch):
+    scenario = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
+    store = IncidentStore(tmp_path / "incidents.sqlite3")
+    snapshot = store.create(scenario)
+    result = store.plan(snapshot.incident_id, "2026-07-17T11:00:00Z")
+    inputs = verified_inputs_from_incident_plan(result)
+    packet = briefing_packet(inputs)
+
+    monkeypatch.setattr("lifeline.agent.openai_narrate", lambda given, *, model: _response(given))
+    artifact, seal = narrate_incident_plan(result, model="gpt-5")
+
+    assert artifact["plan_sha256"] == result["seal"]["sha256"]
+    assert artifact["verification_sha256"] == result["verification_seal"]["sha256"]
+    assert seal["sha256"] == seal_digest(artifact)
+    verify_agent_artifact(artifact, inputs)
+    assert packet["citations"]

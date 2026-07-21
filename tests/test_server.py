@@ -95,6 +95,65 @@ def _proposed(plan):
     return next(p for p in plan["proposals"] if p["status"] == "PROPOSED")
 
 
+def test_agent_briefing_endpoint_requires_a_coordinator_before_any_provider_call(room, monkeypatch):
+    base, _, _, _, _ = room
+    called = False
+
+    def forbidden_provider(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("provider must not run before authentication")
+
+    monkeypatch.setattr("lifeline.agent.narrate_incident_plan", forbidden_provider)
+    status, body = _post_to(
+        base, "/api/incidents/not-disclosed/agent-briefing", {"reference_time": "2026-07-17T11:00:00Z"})
+
+    assert status == 401
+    assert "bearer token" in body["error"]
+    assert called is False
+
+
+def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room, monkeypatch):
+    from lifeline.agent import agent_artifact, agent_seal, briefing_packet, verified_inputs_from_incident_plan
+
+    base, _, _, _, token = room
+    scenario = json.loads(SCENARIO_PATH.read_text(encoding="utf-8"))
+    status, created = _post_to(base, "/api/incidents", scenario, token)
+    assert status == 201
+    incident_id = created["incident_id"]
+    before_status, before = _get_json(base, f"/api/incidents/{incident_id}", token)
+    assert before_status == 200
+    observed_models = []
+
+    def fake_narration(result, *, model):
+        observed_models.append(model)
+        inputs = verified_inputs_from_incident_plan(result)
+        packet = briefing_packet(inputs)
+        citation = packet["citations"][0]["id"]
+        narration = {
+            "headline": "Cited local briefing",
+            "situation_summary": "An optional interpretation of verified sealed inputs.",
+            "observations": [{"text": "The sealed plan remains available.", "citations": [citation]}],
+            "questions_for_human": [{"question": "What evidence should be checked next?", "citations": [citation]}],
+            "authority_boundary": "INTERPRETIVE_ONLY",
+        }
+        artifact = agent_artifact(inputs, packet, narration, model=model)
+        return artifact, agent_seal(artifact)
+
+    monkeypatch.setattr("lifeline.agent.narrate_incident_plan", fake_narration)
+    status, body = _post_to(
+        base, f"/api/incidents/{incident_id}/agent-briefing",
+        {"reference_time": "2026-07-17T11:00:00Z", "model": "browser-controlled-model"}, token)
+
+    assert status == 200
+    assert body["agent_briefing"]["authority_boundary"] == "INTERPRETIVE_ONLY"
+    assert body["agent_briefing_seal"]["sha256"]
+    assert observed_models == ["gpt-5"]
+    after_status, after = _get_json(base, f"/api/incidents/{incident_id}", token)
+    assert after_status == 200
+    assert after["revision"] == before["revision"]
+
+
 def _raw_approval_request(base, token, content_length: str) -> bytes:
     port = int(base.rsplit(":", 1)[1])
     request = (

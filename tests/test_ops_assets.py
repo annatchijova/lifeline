@@ -10,3 +10,12 @@ def test_operations_console_stays_local_and_does_not_persist_tokens():
     assert "dispatch_authority" in page
     assert "localStorage" not in page
     assert "sessionStorage" not in page
+
+
+def test_operations_console_labels_agent_briefing_as_optional_and_non_authoritative():
+    page = (Path(__file__).resolve().parent.parent / "web" / "ops.html").read_text(encoding="utf-8")
+
+    assert 'id="agent-briefing"' in page
+    assert "/agent-briefing" in page
+    assert "INTERPRETIVE_ONLY" in page
+    assert "cannot modify the incident, plan, approval, or dispatch state" in page

@@ -117,6 +117,18 @@ def load_verified_inputs(out_dir: str | Path) -> AgentInputs:
     plan_seal = _read_json_object(out / "plan.seal.json")
     verification = _read_json_object(out / "verification.json")
     verification_seal = _read_json_object(out / "verification.seal.json")
+    return verified_inputs_from_payload(plan, plan_seal, verification, verification_seal)
+
+
+def verified_inputs_from_payload(plan: object, plan_seal: object, verification: object, verification_seal: object) -> AgentInputs:
+    """Validate a plan/verification quartet already held in memory.
+
+    The local incident API creates the same quartet from a hash-linked incident
+    revision. Keeping this check here means its agent path has the exact same
+    evidence gate as the standalone export path.
+    """
+    if not all(isinstance(value, dict) for value in (plan, plan_seal, verification, verification_seal)):
+        raise AgentBriefingError("sealed inputs must be JSON objects")
     try:
         plan_sha256 = seal_digest(plan)
         verification_sha256 = seal_digest(verification)
@@ -133,6 +145,14 @@ def load_verified_inputs(out_dir: str | Path) -> AgentInputs:
     except VerificationError as error:
         raise AgentBriefingError(f"verification semantics failed: {error}") from error
     return AgentInputs(plan, verification, plan_sha256, verification_sha256)
+
+
+def verified_inputs_from_incident_plan(result: object) -> AgentInputs:
+    """Extract the sealed quartet returned by ``IncidentStore.plan``."""
+    if not isinstance(result, dict):
+        raise AgentBriefingError("incident plan result must be a JSON object")
+    return verified_inputs_from_payload(
+        result.get("plan"), result.get("seal"), result.get("verification"), result.get("verification_seal"))
 
 
 def briefing_packet(inputs: AgentInputs) -> dict:
@@ -396,14 +416,9 @@ def write_agent_artifact(out_dir: str | Path, artifact: dict) -> dict:
     out.mkdir(parents=True, exist_ok=True)
     digest = seal_digest(artifact)
     _atomic_write_text(out / "agent_briefing.json", json.dumps(artifact, sort_keys=True, indent=2, ensure_ascii=True) + "\n")
-    seal = {
-        "sha256": digest,
-        "agent_briefing_version": AGENT_BRIEFING_VERSION,
-        "seal_version": AGENT_SEAL_VERSION,
-        "plan_sha256": artifact["plan_sha256"],
-        "verification_sha256": artifact["verification_sha256"],
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
+    seal = agent_seal(artifact)
+    if seal["sha256"] != digest:  # defensive: one canonical digest source
+        raise AgentBriefingError("agent artifact digest changed before sealing")
     _atomic_write_text(out / "agent_briefing.seal.json", json.dumps(seal, sort_keys=True, indent=2, ensure_ascii=True) + "\n")
     return seal
 
@@ -415,3 +430,29 @@ def narrate_export(out_dir: str | Path, *, model: str) -> tuple[dict, dict]:
     narration = openai_narrate(packet, model=model)
     artifact = agent_artifact(inputs, packet, narration, model=model)
     return artifact, write_agent_artifact(out_dir, artifact)
+
+
+def narrate_incident_plan(result: object, *, model: str) -> tuple[dict, dict]:
+    """Narrate one current incident-plan result without writing incident state.
+
+    The caller may return this short-lived sealed response to an authenticated
+    local coordinator. No report, plan, approval, or incident revision changes
+    merely because a narration was requested.
+    """
+    inputs = verified_inputs_from_incident_plan(result)
+    packet = briefing_packet(inputs)
+    narration = openai_narrate(packet, model=model)
+    artifact = agent_artifact(inputs, packet, narration, model=model)
+    return artifact, agent_seal(artifact)
+
+
+def agent_seal(artifact: dict) -> dict:
+    """Return the seal metadata for an agent artifact without persisting it."""
+    return {
+        "sha256": seal_digest(artifact),
+        "agent_briefing_version": AGENT_BRIEFING_VERSION,
+        "seal_version": AGENT_SEAL_VERSION,
+        "plan_sha256": artifact["plan_sha256"],
+        "verification_sha256": artifact["verification_sha256"],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }

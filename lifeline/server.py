@@ -12,6 +12,9 @@ Endpoints:
   GET    /api/incidents/{id}/events?after_revision=N -> append-only event feed
   GET    /api/incidents/{id}/alerts?after_revision=N -> deterministic attention feed
   POST   /api/incidents/{id}/plan -> seal a plan from the stored revision
+  POST   /api/incidents/{id}/agent-briefing -> optional, cited OpenAI narration
+                           over the current sealed incident plan; coordinator
+                           authenticated because this is external data egress
   GET/POST /api/incidents/{id}/approvals -> verified per-incident decision ledger
   GET  /api/approvals   -> {"entries": [...], "chain_ok": bool, "chain_error": str|null}
   POST /api/approvals   -> record one decision for a PROPOSED item of the
@@ -445,6 +448,29 @@ class RoomHandler(SimpleHTTPRequestHandler):
                     raise ApiError(400, "reference_time must be a string or null")
                 self._send_json(200, self.server.incidents.plan(incident_id, reference_time))
                 return
+            if action == "agent-briefing":
+                # A narration has no operational authority, but it does send a
+                # sealed packet to an external provider. Keep that egress behind
+                # the local coordinator role, never behind a browser-only demo.
+                self._operator("coordinator")
+                body = self._json_body()
+                reference_time = body.get("reference_time")
+                if reference_time is not None and not isinstance(reference_time, str):
+                    raise ApiError(400, "reference_time must be a string or null")
+                try:
+                    from lifeline.agent import AgentBriefingError, narrate_incident_plan
+                    artifact, seal = narrate_incident_plan(
+                        self.server.incidents.plan(incident_id, reference_time),
+                        model=self.server.agent_model,
+                    )
+                except AgentBriefingError as error:
+                    raise ApiError(503, f"agent narration unavailable: {error}") from error
+                self._send_json(200, {
+                    "incident_id": incident_id,
+                    "agent_briefing": artifact,
+                    "agent_briefing_seal": seal,
+                })
+                return
             if action == "approvals":
                 operator = self._operator("coordinator")
                 body = self._json_body()
@@ -479,6 +505,7 @@ def make_server(root_dir: str | Path, out_dir: str | Path, host: str = "127.0.0.
     server.approvals_path = server.out_dir / "approvals.jsonl"
     server.approvals_lock = threading.Lock()
     server.request_timeout_seconds = REQUEST_TIMEOUT_SECONDS
+    server.agent_model = os.environ.get("LIFELINE_AGENT_MODEL", "gpt-5")
     server.incidents = IncidentStore(server.out_dir / "incidents.sqlite3")
     server.operators = OperatorStore(server.out_dir / "operators.sqlite3")
     return server

@@ -105,6 +105,29 @@ Briefing panel shows the cited output only if its browser-verifiable seal and
 input bindings match. Without an artifact, the deterministic room works
 normally and labels the feature as optional.
 
+## Generate from Local Operations
+
+The local operations console also exposes **Generate cited agent briefing**
+after a coordinator has computed a sealed plan for a selected incident. It
+calls:
+
+```text
+POST /api/incidents/{incident_id}/agent-briefing
+```
+
+This route requires a local `coordinator` token even though the returned text
+has no operational authority. The reason is data egress: the route sends the
+same minimal sealed packet to the optional external provider. It does not
+write a report, revision, plan, approval, alert, or dispatch record. The
+response contains a separately sealed short-lived artifact for the current
+incident plan; recomputing a plan requires a new narration request.
+
+The server chooses the model through `LIFELINE_AGENT_MODEL` (default `gpt-5`),
+not from browser input. This keeps model selection out of untrusted client
+requests. If `OPENAI_API_KEY` is missing or the provider rejects the request,
+the endpoint returns an explicit unavailable error and the incident remains
+unchanged.
+
 ## What verification does and does not prove
 
 The seal proves that the recorded narration and its declared input bindings
