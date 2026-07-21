@@ -593,22 +593,35 @@ These screenshots show the local synthetic workflow: typed report ingestion,
 the controlled cited Agent Briefing, and the sealed incident room. They are
 evidence of the prototype interface, not evidence of a real incident.
 
-<details>
-<summary>Open the six captured local screens</summary>
+### Static judge demo
 
-![Operations console with typed report form](<visual/Screenshot%20from%202026-07-21%2011-47-07.png>)
+<p>
+  <img alt="LIFELINE static judge landing" src="visual/Screenshot%20from%202026-07-20%2016-49-21.png" width="49%">
+  <img alt="LIFELINE synthetic incident overview" src="visual/Screenshot%20from%202026-07-20%2016-49-26.png" width="49%">
+</p>
+<p>
+  <img alt="LIFELINE evidence-first planning view" src="visual/Screenshot%20from%202026-07-20%2016-49-31.png" width="49%">
+  <img alt="LIFELINE verification and human approval view" src="visual/Screenshot%20from%202026-07-20%2016-49-41.png" width="49%">
+</p>
+<p>
+  <img alt="LIFELINE static demo details" src="visual/Screenshot%20from%202026-07-20%2016-49-50.png" width="49%">
+  <img alt="LIFELINE static demo closing view" src="visual/Screenshot%20from%202026-07-20%2016-49-57.png" width="49%">
+</p>
 
-![Controlled agent briefing rendered in the local operations console](<visual/Screenshot%20from%202026-07-21%2011-59-40.png>)
+### Local operations and controlled Agent Briefing
 
-![Agent briefing observations and deterministic evidence citations](<visual/Screenshot%20from%202026-07-21%2011-59-44.png>)
-
-![Agent briefing questions for human review](<visual/Screenshot%20from%202026-07-21%2011-59-48.png>)
-
-![Sealed local incident room with the controlled agent briefing](<visual/Screenshot%20from%202026-07-21%2011-59-55.png>)
-
-![Evidence citations and human questions in the incident room](<visual/Screenshot%20from%202026-07-21%2012-00-00.png>)
-
-</details>
+<p>
+  <img alt="LIFELINE operations console with typed report form" src="visual/Screenshot%20from%202026-07-21%2011-47-07.png" width="49%">
+  <img alt="LIFELINE controlled agent briefing in local operations" src="visual/Screenshot%20from%202026-07-21%2011-59-40.png" width="49%">
+</p>
+<p>
+  <img alt="LIFELINE agent briefing observations and evidence citations" src="visual/Screenshot%20from%202026-07-21%2011-59-44.png" width="49%">
+  <img alt="LIFELINE agent briefing questions for human review" src="visual/Screenshot%20from%202026-07-21%2011-59-48.png" width="49%">
+</p>
+<p>
+  <img alt="LIFELINE sealed incident room with controlled agent briefing" src="visual/Screenshot%20from%202026-07-21%2011-59-55.png" width="49%">
+  <img alt="LIFELINE incident room evidence and human questions" src="visual/Screenshot%20from%202026-07-21%2012-00-00.png" width="49%">
+</p>
 
 ---
 
