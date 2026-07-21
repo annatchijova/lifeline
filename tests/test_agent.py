@@ -32,7 +32,9 @@ def _response(packet):
     citation = packet["citations"][0]["id"]
     return {
         "headline": "Sealed incident briefing",
+        "headline_citations": [citation],
         "situation_summary": "This is an interpretation of sealed evidence for a human coordinator.",
+        "summary_citations": [citation],
         "observations": [{"text": "One proposal is present in the sealed plan.", "citations": [citation]}],
         "questions_for_human": [{"question": "What should be verified next?", "citations": [citation]}],
         "authority_boundary": AUTHORITY_BOUNDARY,
@@ -73,6 +75,22 @@ def test_agent_response_rejects_unknown_citation_and_authority_drift(tmp_path):
     response = _response(packet)
     response["authority_boundary"] = "DISPATCH_AUTHORITY"
     with pytest.raises(AgentBriefingError, match="interpretive-only"):
+        validate_narration(response, packet)
+
+
+def test_agent_response_rejects_uncited_headline_or_summary(tmp_path):
+    export_plan(SCENARIO_PATH, tmp_path)
+    packet = briefing_packet(load_verified_inputs(tmp_path))
+    response = _response(packet)
+    response["headline"] = "Dispatch boat-02 now"
+    response["headline_citations"] = []
+    with pytest.raises(AgentBriefingError, match="invalid citations in headline"):
+        validate_narration(response, packet)
+
+    response = _response(packet)
+    response["situation_summary"] = "The route is certainly safe and boat-02 must be deployed."
+    response["summary_citations"] = ["outside:packet"]
+    with pytest.raises(AgentBriefingError, match="outside the sealed packet in situation_summary"):
         validate_narration(response, packet)
 
 

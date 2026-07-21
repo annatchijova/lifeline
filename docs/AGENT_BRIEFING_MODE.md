@@ -66,7 +66,8 @@ The implementation uses the OpenAI Responses API with:
 - no OpenAI built-in tools;
 - no custom function tools;
 - an explicit `INTERPRETIVE_ONLY` authority boundary;
-- a requirement that every observation and question cite packet evidence.
+- a requirement that the headline, summary, every observation, and every
+  question cite packet evidence.
 
 The code validates the returned JSON again locally. Unknown citations, missing
 citations, unexpected fields, malformed values, or an authority-boundary change

@@ -612,14 +612,6 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
     status.style.cssText = "margin:5px 0 9px;color:#c39aff;font-size:.82rem;font-weight:700";
     status.textContent = `${w("sealed optional narration", "narración opcional sellada")} · ${w("input binding verified in browser", "vínculo con insumos verificado en el navegador")} · ${artifact.model}`;
     content.appendChild(status);
-    const headline = document.createElement("h3");
-    headline.style.cssText = "margin:0 0 6px;font-size:1rem;color:var(--paper)";
-    headline.textContent = narration.headline || w("Untitled briefing", "Briefing sin título");
-    content.appendChild(headline);
-    const summary = document.createElement("p");
-    summary.style.margin = "0 0 9px";
-    summary.textContent = narration.situation_summary || "";
-    content.appendChild(summary);
     const citationLabel = citation => {
       if (typeof citation !== "string") return "";
       if (citation.startsWith("proposal:")) {
@@ -647,6 +639,21 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
       }
       return citation;
     };
+    const citedEvidence = citations => {
+      const line = document.createElement("small");
+      line.style.cssText = "display:block;margin-top:3px;color:#c39aff";
+      line.textContent = Array.isArray(citations)
+        ? `${w("evidence", "evidencia")}: ${citations.map(citationLabel).join(" · ")}` : "";
+      return line;
+    };
+    const headline = document.createElement("h3");
+    headline.style.cssText = "margin:0 0 2px;font-size:1rem;color:var(--paper)";
+    headline.textContent = narration.headline || w("Untitled briefing", "Briefing sin título");
+    content.append(headline, citedEvidence(narration.headline_citations));
+    const summary = document.createElement("p");
+    summary.style.margin = "8px 0 2px";
+    summary.textContent = narration.situation_summary || "";
+    content.append(summary, citedEvidence(narration.summary_citations));
     const appendItems = (title, items, field) => {
       if (!Array.isArray(items) || !items.length) return;
       const label = document.createElement("b");
@@ -658,10 +665,7 @@ if(/^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(location.hostname)){var _r=docu
         row.style.cssText = "margin:5px 0;padding-left:8px;border-left:2px solid rgba(195,154,255,.5)";
         const line = document.createElement("div");
         line.textContent = item && typeof item[field] === "string" ? item[field] : "";
-        const citations = document.createElement("small");
-        citations.style.cssText = "display:block;margin-top:3px;color:#c39aff";
-        citations.textContent = Array.isArray(item && item.citations)
-          ? `${w("evidence", "evidencia")}: ${item.citations.map(citationLabel).join(" · ")}` : "";
+        const citations = citedEvidence(item && item.citations);
         row.append(line, citations);
         content.appendChild(row);
       });

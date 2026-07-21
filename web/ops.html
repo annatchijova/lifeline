@@ -141,12 +141,6 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
     const delta = Number.isInteger(result.after_revision) ? `${word("changes since revision", "cambios desde la revisión")} ${result.after_revision}` : word("current sealed state", "estado sellado actual");
     status.textContent = `${word("Cited optional narration", "Narración opcional con citas")} · ${artifact.model} · ${delta} · ${word("no operational authority", "sin autoridad operativa")}`;
     agentResult.append(status);
-    const headline = document.createElement("h3");
-    headline.textContent = narration.headline || word("Untitled briefing", "Briefing sin título");
-    agentResult.append(headline);
-    const summary = document.createElement("p");
-    summary.textContent = narration.situation_summary || "";
-    agentResult.append(summary);
     const citationLabel = citation => {
       if (typeof citation !== "string") return "";
       if (citation.startsWith("proposal:")) {
@@ -174,16 +168,26 @@ el("connect").onclick=connect;el("search").onclick=search;el("create").onclick=c
       }
       return citation;
     };
+    const citedEvidence = citations => {
+      const line = document.createElement("small");
+      line.style.cssText = "display:block;margin-top:3px;color:#8e50e6";
+      line.textContent = Array.isArray(citations)
+        ? `${word("evidence", "evidencia")}: ${citations.map(citationLabel).join(" · ")}` : "";
+      return line;
+    };
+    const headline = document.createElement("h3");
+    headline.textContent = narration.headline || word("Untitled briefing", "Briefing sin título");
+    agentResult.append(headline, citedEvidence(narration.headline_citations));
+    const summary = document.createElement("p");
+    summary.textContent = narration.situation_summary || "";
+    agentResult.append(summary, citedEvidence(narration.summary_citations));
     [[word("Observations", "Observaciones"), narration.observations, "text"], [word("Questions for a human", "Preguntas para una persona"), narration.questions_for_human, "question"]].forEach(([label, items, field]) => {
       if (!Array.isArray(items) || !items.length) return;
       const title = document.createElement("b"); title.textContent = label; agentResult.append(title);
       items.forEach(item => {
         const line = document.createElement("p");
         line.textContent = item[field];
-        const citations = document.createElement("small");
-        citations.style.cssText = "display:block;margin-top:3px;color:#8e50e6";
-        citations.textContent = Array.isArray(item.citations)
-          ? `${word("evidence", "evidencia")}: ${item.citations.map(citationLabel).join(" · ")}` : "";
+        const citations = citedEvidence(item.citations);
         agentResult.append(line);
         agentResult.append(citations);
       });

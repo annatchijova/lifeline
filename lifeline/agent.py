@@ -21,7 +21,7 @@ from urllib.request import Request, urlopen
 from lifeline.export import CanonicalizationError, _atomic_write_text, seal_digest
 from lifeline.verification import VerificationError, verify_payload
 
-AGENT_BRIEFING_VERSION = 2
+AGENT_BRIEFING_VERSION = 3
 AGENT_SEAL_VERSION = 1
 AUTHORITY_BOUNDARY = "INTERPRETIVE_ONLY"
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -50,19 +50,30 @@ or source of operational facts.
 Use only the supplied packet. Do not invent, upgrade, reconcile, or omit
 evidence. Do not rank people, recommend a dispatch, choose a resource, issue
 instructions, or state that a human should approve or reject a proposal. Keep
-contradictions and unresolved evidence explicit. Every factual observation and
-every question must cite one or more supplied citation IDs. Return only JSON
-matching the requested schema. The authority_boundary value must be exactly
-INTERPRETIVE_ONLY."""
+contradictions and unresolved evidence explicit. The headline, situation
+summary, every factual observation, and every question must cite one or more
+supplied citation IDs. Return only JSON matching the requested schema. The
+authority_boundary value must be exactly INTERPRETIVE_ONLY."""
 
 
 NARRATION_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["headline", "situation_summary", "observations", "questions_for_human", "authority_boundary"],
+    "required": [
+        "headline", "headline_citations", "situation_summary", "summary_citations",
+        "observations", "questions_for_human", "authority_boundary",
+    ],
     "properties": {
         "headline": {"type": "string", "minLength": 1, "maxLength": 280},
+        "headline_citations": {
+            "type": "array", "minItems": 1, "maxItems": 8,
+            "items": {"type": "string", "minLength": 1, "maxLength": 180},
+        },
         "situation_summary": {"type": "string", "minLength": 1, "maxLength": 2400},
+        "summary_citations": {
+            "type": "array", "minItems": 1, "maxItems": 8,
+            "items": {"type": "string", "minLength": 1, "maxLength": 180},
+        },
         "observations": {
             "type": "array",
             "maxItems": 12,
@@ -409,6 +420,14 @@ def _require_string(value: object, field: str, *, limit: int) -> str:
     return value
 
 
+def _validate_citations(value: object, field: str, known_citations: set[str]) -> list[str]:
+    if not isinstance(value, list) or not value or len(value) > 8 or any(not isinstance(ref, str) for ref in value):
+        raise AgentBriefingError(f"agent response has invalid citations in {field}")
+    if len(set(value)) != len(value) or any(ref not in known_citations for ref in value):
+        raise AgentBriefingError(f"agent response cites evidence outside the sealed packet in {field}")
+    return value
+
+
 def _validate_cited_items(value: object, field: str, known_citations: set[str], text_key: str, *, limit: int) -> list[dict]:
     if not isinstance(value, list) or len(value) > limit:
         raise AgentBriefingError(f"agent response has an invalid {field}")
@@ -417,11 +436,7 @@ def _validate_cited_items(value: object, field: str, known_citations: set[str], 
         if not isinstance(item, dict) or set(item) != {text_key, "citations"}:
             raise AgentBriefingError(f"agent response has an invalid {field}[{index}]")
         text = _require_string(item.get(text_key), f"{field}[{index}].{text_key}", limit=1200)
-        refs = item.get("citations")
-        if not isinstance(refs, list) or not refs or len(refs) > 8 or any(not isinstance(ref, str) for ref in refs):
-            raise AgentBriefingError(f"agent response has invalid citations in {field}[{index}]")
-        if len(set(refs)) != len(refs) or any(ref not in known_citations for ref in refs):
-            raise AgentBriefingError(f"agent response cites evidence outside the sealed packet in {field}[{index}]")
+        refs = _validate_citations(item.get("citations"), f"{field}[{index}]", known_citations)
         items.append({text_key: text, "citations": refs})
     return items
 
@@ -429,7 +444,8 @@ def _validate_cited_items(value: object, field: str, known_citations: set[str], 
 def validate_narration(response: object, packet: dict) -> dict:
     """Reject output that is not a cited, explicitly non-authoritative brief."""
     if not isinstance(response, dict) or set(response) != {
-        "headline", "situation_summary", "observations", "questions_for_human", "authority_boundary",
+        "headline", "headline_citations", "situation_summary", "summary_citations",
+        "observations", "questions_for_human", "authority_boundary",
     }:
         raise AgentBriefingError("agent response does not match the narration contract")
     if response.get("authority_boundary") != AUTHORITY_BOUNDARY:
@@ -442,7 +458,9 @@ def validate_narration(response: object, packet: dict) -> dict:
         raise AgentBriefingError("sealed packet has an empty citation vocabulary")
     return {
         "headline": _require_string(response.get("headline"), "headline", limit=280),
+        "headline_citations": _validate_citations(response.get("headline_citations"), "headline", known),
         "situation_summary": _require_string(response.get("situation_summary"), "situation_summary", limit=2400),
+        "summary_citations": _validate_citations(response.get("summary_citations"), "situation_summary", known),
         "observations": _validate_cited_items(response.get("observations"), "observations", known, "text", limit=12),
         "questions_for_human": _validate_cited_items(response.get("questions_for_human"), "questions_for_human", known, "question", limit=10),
         "authority_boundary": AUTHORITY_BOUNDARY,

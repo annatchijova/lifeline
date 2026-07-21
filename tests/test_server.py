@@ -135,7 +135,9 @@ def test_agent_briefing_endpoint_returns_a_sealed_read_only_interpretation(room,
         citation = packet["citations"][0]["id"]
         narration = {
             "headline": "Cited local briefing",
+            "headline_citations": [citation],
             "situation_summary": "An optional interpretation of verified sealed inputs.",
+            "summary_citations": [citation],
             "observations": [{"text": "The sealed plan remains available.", "citations": [citation]}],
             "questions_for_human": [{"question": "What evidence should be checked next?", "citations": [citation]}],
             "authority_boundary": "INTERPRETIVE_ONLY",
