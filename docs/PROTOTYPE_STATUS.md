@@ -6,9 +6,9 @@ LIFELINE is an open-source, fully functional research and hackathon prototype.
 It is not a concept paper, interface mock-up, production service, or validated
 emergency-management system.
 
-The current repository baseline contains roughly 6,700 lines of Python and
-more than 100 automated regression tests. Its synthetic vertical slice exercises typed
-report ingestion, deterministic validation, incident revisions, planning,
+The current tracked baseline contains 10,051 lines of code across 61 versioned
+files, including 5,380 lines of Python code, and more than 100 automated
+regression tests. Its synthetic vertical slice exercises typed report ingestion, deterministic validation, incident revisions, planning,
 Verification Graph generation, alternative simulation, local authenticated
 approval, export, browser rendering, and offline verification.
 

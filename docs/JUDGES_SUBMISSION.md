@@ -58,9 +58,10 @@ the system exposes the reason and the evidence still required.
 ## Prototype maturity: substantial implementation, limited claim
 
 LIFELINE is working software, not a concept paper or frontend mock-up. The
-current repository baseline contains roughly **6,700 lines of Python** and
-**more than 100 automated regression tests** implementing a deterministic planning
-kernel, local authenticated incident backend, incident revisions, simulations,
+current tracked baseline contains **10,051 lines of code across 61 versioned
+files**, including **5,380 lines of Python code**, and **more than 100
+automated regression tests** implementing a deterministic planning kernel,
+local authenticated incident backend, incident revisions, simulations,
 verification artifacts, approval ledger, CLI, and browser operations room.
 
 The complete synthetic lifecycle has been exercised end-to-end, and focused

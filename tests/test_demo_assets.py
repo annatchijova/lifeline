@@ -63,6 +63,8 @@ def test_static_landing_explains_the_working_prototype_and_agent_boundary():
 
     assert "Built as a system, not a mock-up." in landing
     assert "Ten ideas. Three became one." in landing
+    assert "10,000+ tracked code lines" in landing
+    assert "5,300+ Python LOC" in landing
     assert "100+ regression tests" in landing
     assert "focused red-team rounds" in landing
     assert "Optional agent boundary" in landing

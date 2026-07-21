@@ -81,15 +81,27 @@ is only the visible window into that larger lifecycle.
 ## Repository at a glance
 
 LIFELINE is a working open-source research prototype, not a concept paper or
-an interface mock-up. At the current repository baseline it contains roughly
-**6,700 lines of Python** and **more than 100 automated regression tests** across a
-deterministic planning kernel, authenticated local incident backend,
-simulation engine, sealed verification artifacts, CLI tooling, and browser
-operations surfaces.
+an interface mock-up. The current tracked baseline contains **10,051 lines of
+code across 61 versioned files**, including **5,380 lines of Python code**,
+2,363 lines of Markdown, 1,177 lines of JSON, and 1,131 lines of HTML. It also
+has **more than 100 automated regression tests** across a deterministic
+planning kernel, authenticated local incident backend, simulation engine,
+sealed verification artifacts, CLI tooling, and browser operations surfaces.
+
+| Tracked surface (`cloc`) | Files | Code lines |
+| --- | ---: | ---: |
+| Python | 32 | 5,380 |
+| Markdown | 18 | 2,363 |
+| JSON | 8 | 1,177 |
+| HTML | 3 | 1,131 |
+| **Total** | **61** | **10,051** |
 
 ```text
 lifeline/
 ├── lifeline/
+│   ├── __main__.py        # CLI: plan, verify, serve, operator, narrate
+│   ├── alerts.py          # deterministic attention feed
+│   ├── briefing.py        # human-readable incident briefing
 │   ├── core.py            # deterministic planning kernel
 │   ├── validators.py      # freshness, contradiction, and input gates
 │   ├── verification.py    # sealed Verification Graph
@@ -99,11 +111,18 @@ lifeline/
 │   ├── simulate.py        # explicit alternative scenarios
 │   ├── agent.py           # optional non-authoritative reading guide
 │   ├── export.py          # plan, GeoJSON, and seal artifacts
+│   ├── trace.py           # CRONOS-compatible event trace
 │   └── server.py          # loopback incident-room backend
-├── web/                   # bilingual map room and operations console
-├── scenarios/             # synthetic flood scenario and alternatives
-├── tests/                 # automated regression and adversarial tests
-├── docs/                  # architecture, audits, demo, and limits
+├── web/
+│   ├── index.html         # static bilingual judge landing page
+│   ├── room.html          # synthetic incident map room
+│   ├── ops.html           # authenticated operations console
+│   └── demo/              # sealed static synthetic demo bundle
+├── scenarios/
+│   ├── flood_v1.json      # base synthetic flood incident
+│   └── flood_v1_whatifs.json # alternative conditions for simulation
+├── tests/                 # regression, security, and adversarial coverage
+├── docs/                  # architecture, audits, validation, and video runbook
 ├── tools/                 # reproducible demo-bundle tooling
 ├── HACKATHON.MD           # judge links and end-to-end runbook
 └── README.md
