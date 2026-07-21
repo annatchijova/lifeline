@@ -2,6 +2,9 @@
 
 ### When the water rises, the first enemy is not the flood. It is the fog.
 
+**Explore LIFELINE:** [interactive synthetic demo](https://lifeline-openai-hackathon.vercel.app/index.html)
+· [architecture and evidence companion](https://annatchijova.github.io/vigia/lifeline.html)
+
 In the opening hours of a disaster, people are rarely lost for lack of boats or
 beds. They are lost for lack of a shared picture. Which family called. Which
 road is still open. Which shelter still has room. Which boat already left, and
