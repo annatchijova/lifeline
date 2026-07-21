@@ -732,6 +732,7 @@ def nvidia_request_body(packet: dict, model: str) -> dict:
     """
     model = _validated_model(model)
     packet_text = json.dumps(packet, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    contract_text = json.dumps(GUIDE_SCHEMA, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return {
         "model": model,
         "stream": False,
@@ -744,7 +745,11 @@ def nvidia_request_body(packet: dict, model: str) -> dict:
                 "content": (
                     "Return exactly one JSON object matching the reading-guide "
                     "contract. Do not add explanation, Markdown, or code fences. "
-                    "Select opaque citations only from this sealed packet:\n" + packet_text
+                    "The required JSON Schema is below; use exactly its three "
+                    "top-level fields and copy citation IDs exactly from the packet. "
+                    "Do not return any other fields.\n"
+                    "JSON Schema:\n" + contract_text + "\n"
+                    "Sealed packet:\n" + packet_text
                 ),
             },
         ],

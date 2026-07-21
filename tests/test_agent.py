@@ -244,6 +244,10 @@ def test_nvidia_request_keeps_provider_packet_and_no_raw_report_strings(tmp_path
     assert AUTHORITY_BOUNDARY in request["messages"][0]["content"]
     assert "tools" not in request
     assert "store" not in request
+    prompt = request["messages"][1]["content"]
+    assert '"focus_citations"' in prompt
+    assert '"question_citations"' in prompt
+    assert '"authority_boundary"' in prompt
     serialized = json.dumps(request).lower()
     assert "nvidia_api_key" not in serialized
     assert "test-secret" not in serialized
